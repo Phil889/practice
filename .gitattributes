@@ -1,0 +1,14 @@
+# Force LF for shell scripts (cross-platform safety — install.sh breaks on Linux/Mac with CRLF)
+*.sh text eol=lf
+
+# Python scripts run on Linux/Mac CI — keep LF
+*.py text eol=lf
+
+# Markdown + JSON — let git normalize but prefer LF for consistency
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Default: text files normalized to LF in repo
+* text=auto eol=lf
