@@ -1,22 +1,6 @@
 <div align="center">
 
-```
-            ┌──────────────────────────────────────┐
-            │                                      │
-            │        p r a c t i c e               │
-            │      ─────────────────────           │
-            │     audit-grade AI specialists       │
-            │                                      │
-            └──────────────────────────────────────┘
-
-                          user
-                            ↓
-                       supervisor
-                            ↓
-                    orchestrators · workflows
-                            ↓
-                          agents
-```
+<img src="assets/practice-hero.png" alt="practice — audit-grade AI specialists. user → supervisor → orchestrators · workflows → agents" width="900" />
 
 # practice
 
