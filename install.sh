@@ -74,11 +74,26 @@ mkdir -p "$PROJECT_ROOT/.claude/skills/init"
 cp "$PRACTICE_ROOT/.claude/skills/init/SKILL.md" "$PROJECT_ROOT/.claude/skills/init/SKILL.md"
 echo "✓ Installed .claude/skills/init/SKILL.md"
 
-# ---------- Copy templates to a hidden cache the init skill reads from ----------
+# ---------- Make templates available to the init skill ----------
+#
+# The recommended install pattern clones practice INTO $PROJECT_ROOT/.practice/.
+# In that case templates are already in place — no copy needed. We detect this
+# via resolved-path equality and skip the cp (otherwise cp errors "same file"
+# and aborts the script under set -e).
+#
+# When practice is cloned to a sibling/elsewhere, templates ARE copied into
+# $PROJECT_ROOT/.practice/templates/ as the canonical cache the /init skill reads.
 
-mkdir -p "$PROJECT_ROOT/.practice"
-cp -r "$PRACTICE_ROOT/templates/." "$PROJECT_ROOT/.practice/templates/"
-echo "✓ Installed .practice/templates/ ($(find "$PROJECT_ROOT/.practice/templates" -type f | wc -l | tr -d ' ') template files)"
+CACHE_DIR="$PROJECT_ROOT/.practice"
+if [ "$PRACTICE_ROOT" = "$CACHE_DIR" ]; then
+  TEMPLATE_COUNT=$(find "$PRACTICE_ROOT/templates" -type f | wc -l | tr -d ' ')
+  echo "✓ Templates already in place at .practice/templates/ ($TEMPLATE_COUNT files, clone-in-place mode)"
+else
+  mkdir -p "$CACHE_DIR"
+  cp -r "$PRACTICE_ROOT/templates/." "$CACHE_DIR/templates/"
+  TEMPLATE_COUNT=$(find "$CACHE_DIR/templates" -type f | wc -l | tr -d ' ')
+  echo "✓ Installed .practice/templates/ ($TEMPLATE_COUNT files)"
+fi
 
 # ---------- .gitignore the cache ----------
 
