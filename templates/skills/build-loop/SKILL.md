@@ -87,9 +87,11 @@ This block is the implementer's complete brief — it carries enough metadata to
 - **pattern:** <historical-pattern-id from qa-engineer.md, comma-list, or n/a>
 - **report-path:** <repo-relative path to specialist or synthesis report>
 
-## Source (the actual finding text, verbatim)
+## Source
 
-> <one-paragraph quote from the specialist report including all citations>
+**Citation:** `<report-path>` §<finding-id> — the full finding text + load-bearing claims live in the specialist report. Implementer follows the citation when context is needed; brief stays compact (saves ~500-1000 tokens per dispatch vs verbatim quotes).
+
+**One-line summary:** <≤30 words capturing the load-bearing problem>
 
 ## Citations (verified by orchestrator to resolve)
 - <file:line> (confirmed: file exists, line valid)
@@ -107,8 +109,11 @@ Expected RED: <what the probe should return today, verbatim from finding>
 ```
 Expected GREEN: <what the probe should return after fix, verbatim from finding>
 
-## Recommended fix (specialist's proposal — implementer may improve, must justify deviation in commit body)
-<verbatim from finding's "Fix" or "Recommendation" block>
+## Recommended fix
+
+**Citation:** `<report-path>` §<finding-id>'s "Fix" / "Recommendation" block — specialist's proposal lives there. Implementer may improve, must justify deviation in commit body.
+
+**Approach summary:** <≤2 lines describing the gist of the fix>
 
 ## Regression-check checklist (patterns implementer must spot-check NOT reintroduced)
 <orchestrator deduces from touched file paths; defaults defined per-project>

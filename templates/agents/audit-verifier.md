@@ -103,6 +103,26 @@ must include in next report:
 
 # Output
 
+## TL;DR (REQUIRED — first section of your written verdict)
+
+The supervisor and the next session's reviewer both read this FIRST. ≤300 tokens, scannable. Cuts post-audit decision-time spend ~50% with no quality loss.
+
+Required structure (place at the very top of your verdict, before any other section):
+
+````markdown
+## TL;DR
+
+**Verdict:** PASS | PASS-WITH-WARNINGS | FAIL | HARD-FAIL
+**Quality bar (R1–R5):** <e.g. "R1 ✓ R2 ✓ R3 ⚠ R4 ✓ R5 ✓">
+**Re-dispatch needed:** <none | "<specialist-name> for <reason>">
+**Top 3 quality gaps** (if any, most-load-bearing first):
+1. <gap, ≤25 words, with cite>
+2. <gap, ≤25 words, with cite>
+3. <gap, ≤25 words, with cite>
+````
+
+## Full output schema
+
 Write your verdict to `.planning/audits/audit-verifier/{YYYY-MM-DD}-{scope-slug}.md`:
 
 ```markdown

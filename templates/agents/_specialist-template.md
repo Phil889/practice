@@ -73,6 +73,26 @@ If your dispatch prompt cites peer reports, **read them before scoring**. If you
 
 # Output
 
+## TL;DR (REQUIRED — first section of your written output)
+
+The orchestrator reads this FIRST and only drills into specific sections when synthesis needs detail. ≤500 tokens, scannable. Cuts synthesis-phase token spend ~50-70% with no quality loss.
+
+Required structure (place at the very top of your output, before any other section):
+
+````markdown
+## TL;DR
+
+**Top 3 findings** (most-load-bearing first):
+1. **<finding-id>** (P0/P1/P2) — <one-line summary>: <load-bearing claim, ≤30 words>
+2. **<finding-id>** (P0/P1/P2) — <one-line summary>: <load-bearing claim, ≤30 words>
+3. **<finding-id>** (P0/P1/P2) — <one-line summary>: <load-bearing claim, ≤30 words>
+
+**Confidence:** <low | medium | medium-high | high>
+**Re-dispatch flag:** <none | "consider re-dispatch if X">
+````
+
+## Full output schema
+
 Write findings to `.planning/audits/{{NAME}}/{YYYY-MM-DD}-{scope-slug}.md`:
 
 ```markdown
