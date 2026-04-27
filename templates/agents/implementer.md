@@ -117,13 +117,17 @@ Compare the output against the brief's "Files changed" section:
 git add path/to/specific/file path/to/another/file
 ```
 
+**The status file is NEVER staged in the feat commit (the (a)-pattern).** The status file at `.planning/audits/_findings-status/<finding-id>.md` cannot reference its own commit SHA before the commit exists; resolving this with a `Commit: (pending)` placeholder, or with `git commit --amend` after-the-fact, breaks `git log --grep` reproducibility and audit-trail integrity. Instead, the feat commit lands first (carrying the code + migration + verifiable-outcome receipt), then Step 7 writes the status file with the captured SHA and ships it as a separate `docs(<scope>): finalise <finding-id> status file` commit.
+
+If the staged set contains `.planning/audits/_findings-status/<finding-id>.md` at this stage: STOP, unstage with `git restore --staged .planning/audits/_findings-status/<finding-id>.md`, and continue with the feat-only set.
+
 ### 6.2 — Pre-commit validation
 
 ```bash
 git diff --cached --stat
 ```
 
-Verify the staged file-list matches your intended scope. If it shows files you didn't stage explicitly: **STOP**, unstage with `git restore --staged <path>`, investigate.
+Verify the staged file-list matches your intended scope. If it shows files you didn't stage explicitly: **STOP**, unstage with `git restore --staged <path>`, investigate. Common cause: a `git add <dir>` recursively swept files. Always stage by file, not by directory.
 
 ### 6.3 — Commit-message convention
 
@@ -139,20 +143,83 @@ report: <repo-relative path to specialist or synthesis report>
 driver: <comma-list of cross-cited specialists>
 b-pattern: <pattern-id from qa-engineer.md, comma-list, or n/a>
 
-Verifiable-outcome (pre): <one-line probe + RED state>
-Verifiable-outcome (post): <one-line probe + GREEN state>
-Regression-check: <patterns spot-checked, e.g. B2/B3/B19 — clean>
+verifiable-outcome-pre:
+  query: <SQL or probe — verbatim from finding>
+  result: <captured output, ≤3 lines>
+  state: RED (matches finding's expected pre-state)
 
-<2-3 line body explaining the fix's mechanism — what changed and why this is the right shape>
+verifiable-outcome-post:
+  query: <same probe>
+  result: <captured output, ≤3 lines>
+  state: GREEN (matches finding's expected post-state)
+
+regression-check: <list of patterns spot-checked clean, e.g. "B2 clean, B3 clean">
 
 Co-Authored-By: <as configured by your harness install>
 ```
 
 **Type vocabulary:** `fix`, `feat`, `refactor`, `chore`, `migration`, `test`, `docs`, plus project-specific (e.g. `i18n`, `rls`, `ai`).
 
-**Why every line:** the structured fields turn `git log` into the live audit trail. Skipping a field breaks supervisor's HSI-003 (audit-trail integrity) check.
+**Why every line:** the structured fields turn `git log` into the live audit trail. Skipping a field breaks supervisor's audit-trail-integrity check.
 
-### 6.4 — Commit
+### 6.4 — Schema-Bundle Exception (the only legitimate path for multi-finding commits)
+
+Used when 2+ findings share **logically inseparable** schema work and the orchestrator pre-authorized the consolidation in the build PLAN. Examples of legitimate bundles:
+
+- A migration with column-add + CHECK constraint + trigger function on the same table, where the trigger references the new column.
+- A coupled JSON-schema + matching domain-model + matching frontend-type that must land in one transaction to keep type-checking green between the migration and the deploy.
+
+**Required for every bundled commit:**
+
+1. **Build PLAN cites the consolidation rationale.** The orchestrator's PLAN must have a "Migration consolidation" or equivalent section naming the bundled findings + why splitting would corrupt them.
+2. **Commit subject lists ALL bundled finding-IDs in brackets.** This restores `git log --grep "<finding-id>"` for every bundled finding. Format: `[F-001+F-004+F-006-schema]`. Suffixes like `-schema` are allowed when only the schema part is bundled (the service/UI commits remain atomic).
+3. **Body has `additional-findings:` line** listing the non-primary finding-IDs explicitly (the `finding:` line still names the primary).
+4. **Each consolidated finding gets its own status-file** marked `BUNDLED — see Commit-bundling note` with a back-pointer to the bundle SHA.
+5. **Per-finding service/UI commits remain atomic.** Only the schema bundles; service-layer enforcement, UI components, i18n keys, etc. for each finding ship in separate atomic commits.
+
+```
+migration(<scope>): <one-line schema summary> [<F-001>+<F-004>+<F-006-schema>]
+
+audit: foundation-audit/<date>
+roadmap: phase-1
+finding: F-001 (P0) — <specialist>
+report: <report-path>
+driver: <specialist>, <specialist>
+b-pattern: <patterns>
+additional-findings: F-004 (P1, <one-line description>), F-006-schema (P0, <one-line description>)
+consolidation-rationale: schema bundles per build PLAN §"Migration consolidation" — F-004's trigger function references F-006's CHECK column; splitting would require a 3-step migration with intermediate-state validation rules
+
+verifiable-outcome-pre:
+  ...
+
+verifiable-outcome-post:
+  ...
+
+regression-check: <patterns spot-checked clean>
+
+Co-Authored-By: <as configured>
+```
+
+**Unintentional bundling is a violation, NOT a Schema-Bundle Exception.** If two findings end up in one commit because of a staging race, this is a defect — STOP, unstage, split. The Schema-Bundle Exception only applies when the PLAN explicitly authorized consolidation. If you find yourself bundling unintentionally, the pre-stage `git status --short` validation in §6.0 should have caught it.
+
+### 6.5 — Retry commits (when tester FAILed and you re-ship)
+
+```
+fix(<scope>): <one-line> [F-002 retry-1]
+
+audit: <audit-slug>
+roadmap: <phase-id>
+finding: F-002 (P0) — <specialist>
+report: <report-path>
+driver: <specialist>
+b-pattern: <patterns>
+retry-of: <prior-sha>
+retry-reason: <verbatim from tester's "Failure delta" section>
+
+... (rest unchanged from the standard format)
+```
+
+### 6.6 — Commit
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -161,59 +228,85 @@ EOF
 )"
 ```
 
-## Step 7 — Status file
+After commit: `git status` to confirm clean working tree (other than this commit). **Pass the SHA back to caller** — the orchestrator or tester needs it.
 
-Write `.planning/audits/_findings-status/<finding-id>.md`:
+## Step 7 — Status file (the (a)-pattern: separate docs commit)
+
+The feat commit from Step 6 has landed. Capture its short-SHA (`git rev-parse --short HEAD`) and write the status file with the SHA filled in. The status file ships as a **separate atomic commit** so the feat commit and the audit-trail pointer can be greppable independently.
+
+### 7.1 — Write the status file
 
 ```markdown
-# <finding-id> — <one-line title>
+# <finding-id> — <one-line summary>
 
-**Specialist:** <specialist>
-**Severity:** <P0|P1|P2>
-**Source:** <report-path>
-**Brief:** <brief-path>
-
-## Implementer
-
-**Implementer:** implementer agent
+**Status:** SHIPPED (awaiting tester verification)
+**Commit:** <short-sha>            # captured from Step 6, NEVER `(pending)` or any placeholder
+**Implementer:** implementer
 **Date:** <YYYY-MM-DD HH:MM UTC>
-**Commit:** <sha>
-**Branch:** <branch>
+**Source finding:** <report-path> §<finding-id>
 
-### Files changed
-- <path>
-- <path>
+## Pre-fix state
+<probe + result>
 
-### Migrations applied
-- <name> (or "none")
+## Post-fix state (live-verified)
+<probe + result>
 
-### Pre-fix state
-```{lang}
-<probe>
-```
-Result: <RED state output>
-
-### Post-fix state
-```{lang}
-<probe>
-```
-Result: <GREEN state output>
-
-### B-pattern self-check
-- B<N>: clean
-- B<M>: clean (touched RLS, re-checked policy)
+## Files changed
+- <path:line range or "new file">
 - ...
 
-### Notes for tester
-<one paragraph if anything subtle>
+## Migrations applied
+- <name> (or "none")
+
+## Pattern-regression check
+- <patterns relevant to this finding> verified clean
+
+## Hand-off to tester
+Re-run verifiable-outcome: `<probe>`
+Expected: <GREEN state>
 ```
 
-The `tester` will append below this when verification runs.
+**Forbidden:** placeholder values for `**Commit:**` (e.g. `(pending)`, `TBD`, blank, `<short-sha>` literal). The whole point of the (a)-pattern is that the SHA exists before the file is written. If you can't fill it in, you skipped Step 6 — go back.
+
+### 7.2 — Stage and commit the status file as a separate atomic commit
+
+```bash
+git add .planning/audits/_findings-status/<finding-id>.md
+git diff --cached --stat   # must show exactly ONE file
+git commit -m "$(cat <<'EOF'
+docs(<scope>): finalise <finding-id> status file [<finding-id>]
+
+audit: <audit-slug>           # same value as Step 6 commit
+roadmap: <phase-id>           # same value as Step 6 commit
+finding: <finding-id> (<P0|P1|P2>) — <specialist>
+report: <report-path>
+ship-commit: <short-sha-from-step-6>
+
+Co-Authored-By: <as configured>
+EOF
+)"
+```
+
+**Field rules for the docs commit:**
+
+- `<type>` is always `docs` for this commit (it adds an audit-trail pointer, no code change).
+- `<scope>` matches the Step 6 feat commit's scope.
+- The bracketed `[<finding-id>]` is identical to the Step 6 commit's bracket. This makes `git log --grep "<finding-id>"` return both the feat commit AND the status finalisation — the audit-trail SSOT.
+- `ship-commit:` line points back to the Step 6 SHA, completing the bidirectional cross-reference.
+- The staged set must be exactly the one status file. If `--cached --stat` shows anything else: STOP, unstage, investigate.
+
+### 7.3 — Cluster commits
+
+For cluster commits (Schema-Bundle Exception or coupled-finding ships), Step 7 produces **one docs commit per finding-ID in the cluster**. Each cluster member gets its own `.planning/audits/_findings-status/<finding-id>.md` — the cluster doesn't share a status file. The `ship-commit:` field on each docs commit points to the same Step 6 cluster SHA.
+
+### 7.4 — Pass both SHAs back to caller
+
+Return Step 6 SHA (the feat) AND Step 7 SHA (the docs) to the caller. The build-loop tracks both for cycle metrics; the tester only needs the Step 6 SHA.
 
 ## Step 8 — Return
 
 Return concise summary to caller (orchestrator or build-loop):
-- finding-id, commit SHA, files changed, migrations applied, status-file path
+- finding-id, ship-commit-sha (Step 6), docs-commit-sha (Step 7), files changed, migrations applied, status-file path
 
 # Anti-patterns
 

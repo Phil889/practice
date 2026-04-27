@@ -148,6 +148,14 @@ git clone https://github.com/Phil889/practice .practice
 
 You're shipping verified work product within 10 minutes — and your co-pilot is online from minute one.
 
+## Recommended companions
+
+`practice` works on its own, but the harness silently assumes a few behavioural defaults the implementer / tester agents lean on. Install the following Claude Code skills before your first audit-and-ship cycle for the cleanest experience:
+
+- **`andrej-karpathy-skills:karpathy-guidelines`** — behavioural rules that reduce common LLM coding mistakes (surgical changes, assumption surfacing, verifiable success criteria). The build-loop assumes these are active; without them, implementer agents are more likely to overscope or commit assumption-laden code. Install via the Claude Code skills marketplace.
+
+Not required, but recommended. The harness still works without them — just with more rough edges.
+
 ## The four-tier architecture
 
 `practice` is built on four load-bearing layers. Each tier has one job, and the boundaries are **structural** — you can't accidentally call them the wrong way.

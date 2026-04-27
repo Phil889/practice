@@ -135,6 +135,13 @@ Produce `.planning/audits/orchestrator/<YYYY-MM-DD>-build-<scope-slug>-PLAN.md`:
 **Findings selected:** <count>
 **Git rev (start):** <sha>
 
+## Pre-flight (worktree base-ref refresh)
+
+- `git fetch origin` — OK
+- `git pull --ff-only origin {{DEFAULT_BRANCH}}` — at <BASE_REF> (captured pre-dispatch)
+- **BASE_REF:** `<sha>` — every implementer prompt asserts `git merge-base HEAD BASE_REF` matches this value
+- **Re-run between phases:** required if any earlier-phase implementer commit landed on `{{DEFAULT_BRANCH}}`
+
 ## Collision detection
 
 Files touched by ≥2 findings (must sequence, not parallelize):
@@ -165,20 +172,39 @@ See `.planning/audits/_findings-status/<finding-id>-brief.md`.
 
 Per finding, in this order:
 
+### 3a-pre — Pre-dispatch base-ref refresh (worktree base-ref MUST equal `origin/{{DEFAULT_BRANCH}}` tip at dispatch-time)
+
+The Agent runtime's `isolation: "worktree"` snapshots the worktree from the parent's current HEAD at dispatch-time. If the parent's HEAD is stale relative to `origin/{{DEFAULT_BRANCH}}`, every implementer inherits a stale base — causing migration-filename collisions, stale-content cherry-pick conflicts, and silent bugs where an implementer thinks an earlier-phase commit isn't on disk yet. This pattern manifested 3 consecutive times in real ship-clusters before being codified.
+
+**Pre-flight invariant** (run BEFORE Phase 1, and again BEFORE each subsequent phase if any implementer commit landed on `{{DEFAULT_BRANCH}}` since the last phase):
+
+```bash
+git fetch origin
+git checkout {{DEFAULT_BRANCH}}                       # confirm parent is on the dev branch
+git pull --ff-only origin {{DEFAULT_BRANCH}}          # align parent with origin tip
+BASE_REF=$(git rev-parse HEAD)                        # capture the ref worktrees will inherit
+```
+
+Record `BASE_REF` in the build PLAN's `## Pre-flight` section. The runtime does not expose a `from_ref` parameter, so this orchestrator-side pull is the sole reliable mechanism. Re-run the pre-flight between Phases if any earlier-phase implementer commit landed on `{{DEFAULT_BRANCH}}` mid-orchestration.
+
+**Runtime-side staleness is non-deterministic** even after orchestrator-side pre-flight. The Agent runtime's worktree-snapshot caching may still hand the implementer a base older than `BASE_REF` on first dispatch in each parallel batch. The fix is to make canonical-rebase the implementer's first action (instead of an assertion-then-rebase-only-on-failure path). This costs ~0 wall-clock when the snapshot is fresh and saves ~2 min/dispatch when it's stale. The same operation always runs; the only thing that changes is whether it's a no-op.
+
 ### 3a — implementer dispatch
 
 **Worktree-isolation is mandatory for parallel dispatch.** Every parallel implementer Agent call MUST include `isolation: "worktree"`. This eliminates the staging-race that can bundle multiple findings into one commit. Sequential dispatches (Phase 2 / Phase 3) should also pass `isolation: "worktree"` as defence-in-depth.
+
+The dispatch carries the `BASE_REF` (captured in 3a-pre) into the implementer's prompt as the rebase target the implementer must apply before any edit. Detecting a stale base aborts cleanly with explicit manifestation evidence rather than discovering the staleness at cherry-pick / merge time.
 
 ```
 Agent({
   description: "Ship <finding-id>",
   subagent_type: "implementer",
   isolation: "worktree",   // mandatory; prevents parallel-staging race
-  prompt: "Ship finding <finding-id>. Brief at `.planning/audits/_findings-status/<finding-id>-brief.md`. Read the brief, read every cited file, ship the fix per your spec (atomic commit, live-verify, status file). Return when commit is on disk."
+  prompt: "Ship finding <finding-id>. Brief at `.planning/audits/_findings-status/<finding-id>-brief.md`.\n\n**Pre-edit canonical rebase:** Inside your worktree, your FIRST action is `git fetch origin && git rebase <BASE_REF>`. This is canonical, not a fallback — runtime worktree-snapshot caching is non-deterministic, and the rebase aligns it before any edit. The worktree shares the parent's `.git`, so the rebase target is reachable even if `origin/{{DEFAULT_BRANCH}}` lags.\n\n**Falsifier-of-last-resort:** After the rebase, run `git merge-base HEAD <BASE_REF>` and verify the output equals <BASE_REF>. If the rebase claimed success but the assertion still diverges, abort BEFORE any edit, write a one-line falsifier note to your status file's `### Pre-flight` section (`base-ref-falsifier: rebase reported success but merge-base diverged: <actual> != BASE_REF <expected>`), and return ESCALATED. Do NOT attempt the fix on a stale base.\n\nIf both the rebase succeeds and the assertion holds: read the brief, read every cited file, ship the fix per your spec (atomic commit, live-verify, status file). Return when commit is on disk."
 })
 ```
 
-For Phase 1, dispatch all independent findings in a single message (parallel). For Phase 2 / 3, dispatch one at a time, waiting for each implementer to return before dispatching the next. Each implementer's worktree is automatically cleaned up if no changes are made; otherwise the path and branch are returned in the result. Merge implementer worktree-branches back to `{{DEFAULT_BRANCH}}` before dispatching the corresponding tester (the tester needs to see the implementer's commit on the branch to re-run the `verifiable_outcome`).
+For Phase 1, dispatch all independent findings in a single message (parallel). For Phase 2 / 3, dispatch one at a time, waiting for each implementer to return before dispatching the next. Each implementer's worktree is automatically cleaned up if no changes are made; otherwise the path and branch are returned in the result. Merge implementer worktree-branches back to `{{DEFAULT_BRANCH}}` before dispatching the corresponding tester (the tester needs to see the implementer's commit on the branch to re-run the `verifiable_outcome`). After merge-back, re-run the 3a-pre pre-flight if any further parallel batches remain.
 
 ### 3b — tester dispatch
 
