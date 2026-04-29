@@ -87,6 +87,23 @@ End-of-week reflection: what went well, what didn't, what to change next week. R
 ### `mode: hygiene`
 Run the context-hygiene pass per `.planning/audits/_context/HYGIENE-POLICY.md`. Audits every artefact category against its soft/hard cap, archives safe candidates to `_archive/`, updates indexes, regenerates `SESSION-LOG.md`'s monthly rollup, commits the move atomically. Use weekly, or when `mode: snapshot` recommends it. **Required before any heavy playbook if any category exceeds its hard cap.** This is the anti-entropy lever that keeps the harness durable.
 
+### `mode: warm-start`
+Lightweight mid-session resumption after a short break (<4 hours, same session still open). If >4 hours or new session, use full `mode: snapshot` instead. Protocol (3 steps, ~30 seconds, ~1.5K tokens):
+
+1. **Read last SESSION-LOG entry only** — `tail -80 .planning/audits/SESSION-LOG.md` (not the full file). Extract: verdict, top-3 findings, recommended next, open threads.
+2. **Verify HEAD** — `git log -1 --oneline` + compare against the SESSION-LOG entry's last-cited commit SHA. If HEAD diverged (someone pushed in parallel), auto-escalate to `mode: snapshot`.
+3. **One-liner status:**
+
+```
+🔄 Warm-start — session resumed.
+Last run: {playbook} — {verdict} at {time}
+HEAD: {sha} ({matches | DIVERGED — switching to snapshot})
+Open: {count} threads · Next: {recommended playbook}
+Ready to proceed.
+```
+
+If HEAD diverged or any anomaly is detected, auto-escalate to `mode: snapshot` with a note explaining why. The user never gets stale context — either it's clean or it escalates.
+
 ### `mode: talk:<question>`
 Free-form conversational mode. The user asks a question, you synthesise across all artefacts and answer. Examples — "should we ship module X next or fix the escalated F-007 first?", "what did the datenschutz cluster actually reveal that the synthesis didn't capture?", "is our backlog growing faster than we ship?". You can use any read-tool to investigate. **You still end with a steered next-move recommendation.**
 

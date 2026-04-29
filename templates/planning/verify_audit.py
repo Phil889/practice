@@ -10,6 +10,7 @@ The agent only spends LLM tokens on findings that pass these checks.
 Usage:
     python .planning/audits/_context/verify_audit.py <date> [--slug <slug>]
     python .planning/audits/_context/verify_audit.py latest
+    python .planning/audits/_context/verify_audit.py --refresh-patterns  # auto-validate vocabulary vs agent specs
 
 Outputs:
     .planning/audits/_context/verification/<date>-<slug>.json   — machine-readable
@@ -36,6 +37,109 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 AUDITS_DIR = ROOT / ".planning" / "audits"
 VERIFICATION_DIR = AUDITS_DIR / "_context" / "verification"
+AGENTS_DIR = ROOT / ".claude" / "agents"
+
+
+# ---------------------------------------------------------------------------
+# Auto-vocabulary extraction from agent spec files.
+# Eliminates false-positive FAILs caused by heading-name mismatches between
+# what specialists write and what REQUIRED_SECTIONS expects.
+# Extracts `## ` headings from each agent's output template section,
+# deduplicates against existing patterns, and reports gaps.
+# ---------------------------------------------------------------------------
+def extract_sections_from_agent_spec(agent_name: str) -> list[str]:
+    """Parse an agent's .md spec and extract required section names from output templates.
+
+    Looks for fenced code blocks after '# Output' or '## Output' headings
+    and extracts `## Section Name` patterns from them. Also extracts any
+    headings mentioned in 'required_sections' lists within the spec.
+    """
+    spec_path = AGENTS_DIR / f"{agent_name}.md"
+    if not spec_path.exists():
+        return []
+    text = spec_path.read_text(encoding="utf-8", errors="ignore")
+    sections: list[str] = []
+
+    # Strategy 1: Extract ## headings from fenced code blocks in Output sections
+    in_output = False
+    in_fence = False
+    for line in text.splitlines():
+        if re.match(r"^#{1,3}\s+Output", line, re.IGNORECASE):
+            in_output = True
+            continue
+        if in_output and re.match(r"^#{1,2}\s+[A-Z]", line) and "output" not in line.lower():
+            in_output = False
+            continue
+        if in_output:
+            if line.strip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                m = re.match(r"^#{2,4}\s+(.+?)\s*$", line)
+                if m:
+                    heading = m.group(1).strip()
+                    # Strip template variables like {Scope}, {date}, etc.
+                    heading = re.sub(r"\{[^}]+\}", "", heading).strip(" —-")
+                    if heading and heading not in sections:
+                        sections.append(heading)
+
+    # Strategy 2: Extract from explicit section lists in the spec
+    for m in re.finditer(r"required.sections?.*?:\s*\[([^\]]+)\]", text, re.IGNORECASE):
+        for name in re.findall(r'"([^"]+)"', m.group(1)):
+            if name not in sections:
+                sections.append(name)
+
+    return sections
+
+
+def discover_specialist_agents() -> list[str]:
+    """Find all specialist agent .md files (excluding universal agents)."""
+    universal = {"implementer", "tester", "audit-verifier", "_specialist-template"}
+    if not AGENTS_DIR.is_dir():
+        return []
+    return [
+        p.stem for p in AGENTS_DIR.glob("*.md")
+        if p.stem not in universal and not p.name.startswith(".")
+    ]
+
+
+def merge_extracted_vocabulary() -> dict[str, list[str]]:
+    """Extract vocabulary from all agent specs and report new headings not in REQUIRED_SECTIONS.
+
+    Returns a dict of specialist -> list of new section names found in the spec
+    that aren't already covered by the specialist pattern set.
+    """
+    novelties: dict[str, list[str]] = {}
+    specialists = discover_specialist_agents()
+    existing_specialist_flat: set[str] = set()
+    for pattern in REQUIRED_SECTIONS.get("specialist", []):
+        # Extract the human-readable part from the regex
+        cleaned = pattern.replace(r"^## ", "").replace(r"\s*", " ").strip()
+        existing_specialist_flat.add(cleaned.lower())
+
+    for spec_name in specialists:
+        extracted = extract_sections_from_agent_spec(spec_name)
+        if not extracted:
+            continue
+        new = [s for s in extracted if s.lower() not in existing_specialist_flat]
+        if new:
+            novelties[spec_name] = new
+    return novelties
+
+
+def refresh_patterns_report() -> str:
+    """Generate a human-readable report of vocabulary gaps between agent specs and REQUIRED_SECTIONS."""
+    novelties = merge_extracted_vocabulary()
+    if not novelties:
+        return "[refresh-patterns] All agent spec headings are covered by REQUIRED_SECTIONS. No gaps."
+    lines = ["[refresh-patterns] Vocabulary gaps detected:"]
+    for specialist, new_sections in novelties.items():
+        lines.append(f"  {specialist}:")
+        for sec in new_sections:
+            lines.append(f'    + "{sec}" (found in agent spec, not in REQUIRED_SECTIONS)')
+        lines.append(f"    → Consider adding to REQUIRED_SECTIONS['specialist'] or as a per-specialist override.")
+    return "\n".join(lines)
+
 
 REQUIRED_SECTIONS = {
     "orchestrator": [
@@ -274,9 +378,30 @@ def write_outputs(result: dict) -> tuple[Path, Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="practice harness — deterministic audit verifier")
-    parser.add_argument("date", help="YYYY-MM-DD or 'latest'")
+    parser.add_argument("date", nargs="?", default=None, help="YYYY-MM-DD or 'latest'")
     parser.add_argument("--slug", default=None, help="optional slug filter (e.g. 'foundation-audit')")
+    parser.add_argument(
+        "--refresh-patterns",
+        action="store_true",
+        help="auto-extract vocabulary from agent specs and report gaps vs REQUIRED_SECTIONS",
+    )
     args = parser.parse_args()
+
+    # --refresh-patterns mode: report vocabulary gaps and exit
+    if args.refresh_patterns:
+        report = refresh_patterns_report()
+        print(report)
+        return 0
+
+    if not args.date:
+        parser.error("date is required (YYYY-MM-DD or 'latest') unless --refresh-patterns is used")
+
+    # Auto-validate vocabulary on every run (non-blocking warning)
+    novelties = merge_extracted_vocabulary()
+    if novelties:
+        print("⚠️  Vocabulary gaps detected (run --refresh-patterns for details):", file=sys.stderr)
+        for specialist, new in novelties.items():
+            print(f"  {specialist}: {len(new)} new heading(s) in agent spec not in REQUIRED_SECTIONS", file=sys.stderr)
 
     runs = find_audit_runs(args.date, args.slug)
     if not runs:

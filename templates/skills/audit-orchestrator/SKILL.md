@@ -263,6 +263,29 @@ Output: strategic report + {{HORIZON_LABEL}} action plan.
 Tier-2 audit (page-level + intra-module flow + cross-module seams to neighbours).
 
 **Phase 1 (parallel):** all relevant specialists scoped to the module.
+
+### Specialist relevance heuristic (token budget optimization)
+
+Before Phase 1 dispatch, evaluate each specialist's **expected marginal value** for this specific module. A specialist may be marked `SKIP (reason)` in the PLAN report if ALL of these conditions are met:
+
+1. **Prior coverage:** A foundation-audit or prior module-deep-dive already produced findings from this specialist for this module's feature area, AND those findings are <90 days old.
+2. **Low-delta signal:** The module is NOT in the specialist's primary domain. Build a specialist × module affinity matrix for your project. Example:
+
+| Specialist | Primary domains (always dispatch) | Secondary (dispatch if changed since last audit) | Tertiary (SKIP candidate) |
+|---|---|---|---|
+| `{{DOMAIN_SPECIALIST_1}}` | {{PRIMARY_MODULES_1}} | {{SECONDARY_MODULES_1}} | {{TERTIARY_MODULES_1}} |
+| `qa-engineer` | ALL (never skip — bug patterns apply everywhere) | — | — |
+
+3. **No user override:** The user did NOT pass `--narrow=all` to force full roster.
+
+**Safeguards:**
+- `qa-engineer` is NEVER skippable — its findings are structurally unique per module.
+- Specialists covering compliance/regulatory domains are NEVER skippable for modules in their primary domain.
+- Skipped specialists are logged in the PLAN report with the reason. If synthesis or verifier detects a coverage gap attributable to a skip, the next run auto-includes the skipped specialist.
+- Any module's **first-ever** module-deep-dive dispatches the FULL roster (no skip heuristic on first pass).
+
+**Expected savings:** ~15–20% token reduction on subsequent module-deep-dives (1–2 fewer specialist dispatches × ~5K tokens each).
+
 **Phase 2:** sequential — consumes Phase-1.
 **Phase 3:** module strategy synthesis.
 

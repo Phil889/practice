@@ -147,6 +147,9 @@ Re-dispatches are capped at 2 retries per specialist per audit run. After 2, esc
 This file is owned by `audit-orchestrator` and `/init`. When new specialists are added:
 
 - Update the minima table (add row)
-- Update `verify_audit.py` PATTERNS dict (add specialist's required sections)
+- Update `verify_audit.py` REQUIRED_SECTIONS dict (add specialist's required sections)
+- Run `python .planning/audits/_context/verify_audit.py --refresh-patterns` to validate vocabulary coverage against agent specs
+
+When `verify_audit.py` reports vocabulary gaps on a regular verification run, add the missing headings to REQUIRED_SECTIONS or as a per-specialist override.
 
 **Keep this file under 200 lines.** Concision matters more than coverage when every agent has to read it.

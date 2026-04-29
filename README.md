@@ -276,7 +276,7 @@ Every session writes hypotheses to `SYSTEM-CHANGELOG.md` (HSI-001, HSI-002…) �
 
 You're not just running an agentic harness. You're running one that **measures itself, learns, and tells you when it drifted.** The compounding is the product.
 
-**Context hygiene is built in.** Old VERIFIED HSIs auto-archive after 14 days of stability. Session-logs roll up monthly. Closed findings move to `_archive/` 30 days post-PASS. The supervisor's working set stays under a token budget defined in [`templates/planning/HYGIENE-POLICY.md`](templates/planning/HYGIENE-POLICY.md) — `/supervisor mode: hygiene` runs the pass when soft caps trip, and the supervisor refuses heavy playbooks if any hard cap is breached. **The compounding doesn't decay into bloat.**
+**Context hygiene is built in.** Old VERIFIED HSIs auto-archive after 14 days of stability. Session-logs roll up monthly. Closed findings move to `_archive/` 30 days post-PASS. The supervisor's working set stays under a token budget defined in [`templates/planning/HYGIENE-POLICY.md`](templates/planning/HYGIENE-POLICY.md) — `/supervisor mode: hygiene` runs the pass when soft caps trip, and the supervisor refuses heavy playbooks if any hard cap is breached. **Mid-session resumption** is handled by `/supervisor mode: warm-start` — a lightweight protocol that reads only the last SESSION-LOG entry and auto-escalates to full snapshot if the codebase diverged. **The compounding doesn't decay into bloat.**
 
 ## Honest limits
 
@@ -335,6 +335,10 @@ In the first marathon session of harness use, the system:
 - [x] HSI self-improvement loop (SYSTEM-CHANGELOG)
 - [x] `audit-verifier` QA layer
 - [x] Commit-message convention auditing
+- [x] Auto-vocabulary extraction (verify_audit.py `--refresh-patterns`)
+- [x] Brief size ceiling + sub-directory convention for scale
+- [x] Warm-start protocol for mid-session resumption
+- [x] Specialist relevance heuristic for token optimization
 - [ ] **`/init` for any codebase** (in progress)
 - [ ] Domain templates (legal, research, journalism, finance)
 - [ ] Multi-language codebase support (Python, TS, Go, Rust, Ruby)

@@ -6,6 +6,48 @@ Format: [version] — date · one-line summary, followed by What's new / Affecte
 
 ---
 
+## [0.11.0] — 2026-04-29 · Harness robustness: auto-vocabulary, brief ceilings, warm-start, specialist heuristic
+
+Five field-validated improvements ported from the production Zenith harness. All reduce token waste and eliminate recurring maintenance friction without sacrificing audit-grade quality.
+
+### What's new
+
+**`verify_audit.py` — Auto-vocabulary extraction from agent specs.**
+The verifier now auto-discovers required section headings from agent `.md` specs' output templates. Eliminates false-positive FAILs when specialists use heading vocabulary that drifts from `REQUIRED_SECTIONS`. Two new capabilities:
+
+- `--refresh-patterns` CLI flag: scan all agent specs in `.claude/agents/` and report headings not yet covered by `REQUIRED_SECTIONS`. Run after adding/editing specialists.
+- Auto-warning on every verification run: if gaps exist, prints a non-blocking warning to stderr.
+
+**`build-loop` SKILL — Brief size ceiling (8 KB body).**
+Briefs now have a hard cap of 8 KB. When the specialist's finding text would push the brief over 8 KB, the orchestrator switches to citation-only format (reference to the source report, not verbatim quote). Saves ~500-1000 tokens per dispatch. The ceiling is validated after each brief write; oversized briefs are automatically rewritten.
+
+**`build-loop` SKILL — Sub-directory convention for complex findings.**
+When a finding decomposes into >3 sub-findings, use a sub-directory with `INDEX.md` instead of flat naming. Keeps `_findings-status/` scannable as the project scales past 50+ findings.
+
+**`supervisor` SKILL — `mode: warm-start` (lightweight mid-session resumption).**
+New mode for returning after a short break (<4 hours, same session). Reads only the last SESSION-LOG entry + verifies HEAD matches expectations. ~1.5K tokens vs ~5K for full `mode: snapshot`. Auto-escalates to `snapshot` if HEAD diverged.
+
+**`audit-orchestrator` SKILL — Specialist relevance heuristic.**
+Before Phase 1 dispatch in `module-deep-dive`, the orchestrator evaluates each specialist's expected marginal value using a specialist × module affinity matrix. Tertiary-domain specialists may be skipped if prior coverage exists (<90 days old). `qa-engineer` and compliance specialists are NEVER skippable. First-ever module-deep-dive always dispatches full roster. Expected savings: ~15-20% token reduction on subsequent runs.
+
+### Affected templates
+
+- `templates/planning/verify_audit.py` — auto-vocabulary extraction + `--refresh-patterns` CLI
+- `templates/planning/quality-bar.md` — maintenance section references `--refresh-patterns`
+- `templates/skills/build-loop/SKILL.md` — brief size ceiling + sub-directory convention
+- `templates/skills/supervisor/SKILL.md` — `mode: warm-start` protocol
+- `templates/skills/audit-orchestrator/SKILL.md` — specialist relevance heuristic in `module-deep-dive`
+
+### Migration notes (existing v0.10.x installations)
+
+1. **Re-run `/init` is NOT required.** All changes augment existing specs.
+2. **`verify_audit.py`:** Replace your `.planning/audits/_context/verify_audit.py` with the new template. The new version is backwards-compatible — existing verification runs produce identical results; `--refresh-patterns` is additive.
+3. **Build-loop brief ceiling:** Copy the `### Brief size ceiling` and `### Sub-directory convention` sections from `templates/skills/build-loop/SKILL.md` into your `.claude/skills/<your-build-loop>/SKILL.md` after the brief filename convention paragraph.
+4. **Supervisor warm-start:** Copy the `### mode: warm-start` section from `templates/skills/supervisor/SKILL.md` into your `.claude/skills/<your-supervisor>/SKILL.md` mode list.
+5. **Specialist heuristic:** Copy the `### Specialist relevance heuristic` section from `templates/skills/audit-orchestrator/SKILL.md` into your `.claude/skills/<your-orchestrator>/SKILL.md` under the `module-deep-dive` playbook. Customize the affinity matrix for your domain's specialists.
+
+---
+
 ## [0.10.1] — 2026-04-28 · Token-efficiency: TL;DR specialist sections + lighter brief format
 
 Two surgical specs that reduce per-cycle token spend by ~30-50% with zero quality loss. Both ship as field-validated optimizations after observing 6+ weeks of real audit + ship cycles.

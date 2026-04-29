@@ -128,7 +128,47 @@ Expected GREEN: <what the probe should return after fix, verbatim from finding>
 **Status filename convention:** `.planning/audits/_findings-status/<finding-id>.md` (implementer + tester both append to this).
 **Brief is immutable after orchestrator writes it.** Status file is append-only.
 
-## Step 2 — Build dispatch plan
+### Brief size ceiling (8 KB body)
+
+The brief body (everything below `# <finding-id> brief`) must not exceed **8 KB**. If the specialist's finding text + recommendation would push the brief over 8 KB:
+
+1. Keep commit metadata + citations + pre-fix state + verifiable outcome + dependencies verbatim (structurally required).
+2. Replace `## Source` and `## Recommended fix` with citation-only format:
+   - `## Source` → `**Citation:** <report-path> §<finding-id> — read full finding in-situ. One-line summary: <≤30 words>.`
+   - `## Recommended fix` → `**Citation:** <report-path> §<finding-id> "Fix" section — read in-situ. Approach summary: <≤2 lines>.`
+3. Never verbatim-quote more than 10 lines from the specialist report into the brief.
+
+**Validation:** After writing each brief, check file size. If >8 KB, rewrite with citation-only format. If still >8 KB, split the finding into sub-findings per §"Sub-directory convention" below.
+
+### Sub-directory convention for complex findings
+
+When a finding decomposes into **>3 sub-findings**, create a sub-directory:
+
+```
+_findings-status/
+  F-007/
+    F-007a-brief.md
+    F-007a.md
+    F-007b-brief.md
+    ...
+    INDEX.md          # one-line per sub-finding: ID, status, commit SHA
+```
+
+The `INDEX.md` summarises the family:
+
+```markdown
+# F-007 — <Title>
+
+| Sub-finding | Status | Commit | Summary |
+|---|---|---|---|
+| F-007a | VERIFIED | abc1234 | <description> |
+| F-007b | VERIFIED | def5678 | <description> |
+| ... |
+```
+
+**Simple findings (≤3 sub-tasks)** stay flat — no directory needed.
+
+The orchestrator globs both `_findings-status/<id>*` and `_findings-status/<id>/<id>*` when resolving status.
 
 Produce `.planning/audits/orchestrator/<YYYY-MM-DD>-build-<scope-slug>-PLAN.md`:
 
