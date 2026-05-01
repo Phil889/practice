@@ -6,6 +6,69 @@ Format: [version] — date · one-line summary, followed by What's new / Affecte
 
 ---
 
+## [0.14.0] — 2026-05-01 · MANDATORY-AUTO handover + "new session" vocabulary
+
+The handover protocol is now non-negotiable. Previously the supervisor would sometimes recommend "consider stopping here" then ask "want me to write a handover?" — that question was the bug. Users delegated session-boundary autonomy to the harness; asking permission every time wastes the round-trip. v0.14.0 makes handover writing **automatic** when any new-session trigger fires, and clarifies the vocabulary so users understand what the supervisor means.
+
+### What's new
+
+**Vocabulary clarification — "new session" not "break".**
+The constraint is the Claude context window, not the user's time. Users keep working — they just open a fresh conversation. So "we should break" / "fresh session recommended" / "consider stopping here" all map to **"new session"** → mandatory handover. The supervisor's user-facing output now says "new session" explicitly; "break" only appears in internal heuristic descriptions.
+
+**`supervisor` SKILL — Hard Rule #7 reworded + new Hard Rule #8 (MANDATORY-AUTO handover).**
+- Rule #7 was *"Recommend break aggressively"* → now *"Recommend new-session aggressively"* with the cold-start clarification
+- New Rule #8: *"MANDATORY auto-handover when recommending new-session."* The supervisor MUST execute `mode: handover` automatically as part of the same response, without being asked. No "want me to write the handover?" — just write it.
+
+**`supervisor` SKILL — `mode: handover` rewritten as MANDATORY-AUTO.**
+Five explicit auto-trigger conditions:
+
+1. Supervisor's "Next move" recommends a new session for ANY reason (token budget, run cadence, fresh-context need, post-cluster ritual, quality-collapse-risk)
+2. ≥3 heavy playbooks completed this session (foundation-audit / production-readiness-gate / module-deep-dive / ship-cluster)
+3. Token budget estimate ≥70% (rough heuristic: >700K tokens consumed)
+4. User signals session-end via natural language ("good night", "fresh session", "continue tomorrow", "pause", "handover", "new session", "cold start", or similar)
+5. User explicitly invokes `/supervisor mode: handover`
+
+**7 mandatory `RESUME-<date>.md` sections** (was 6):
+1. Literal copy-paste cold-start prompt at the top (the user pastes verbatim into a fresh Claude session)
+2. State at end-of-session
+3. Today's commits grouped by ship-cluster
+4. Recommended cold-start sequence with STOP gates
+5. Open carry-forward (separated from blockers)
+6. Harness HSI status table
+7. Discipline reminders + (optional) pre-staged briefs for next-session ship-cluster
+
+**Auto-execution checklist** the supervisor MUST complete BEFORE returning final response:
+- Write RESUME doc with all 7 sections
+- Update SESSION-LOG with cross-reference
+- Pre-stage next-session brief if planned
+- Update memory `MEMORY.md` "Next Session" pointer
+- Commit as `docs(harness): RESUME-<date> end-of-session handover [supervisor:handover]`
+- Push if push-approved
+- Acknowledge handover as DONE in user-facing response — not requested
+
+**`NEXT MOVE` block updated** with `Handover:` line that says `DONE — RESUME-<date>.md written` (or `n/a (continuing in same session)`) so users see the protocol fired without asking for it.
+
+### Why this rule exists
+
+Asking "want me to write a handover?" every time a session-end heuristic fires forces the user to make a decision they already delegated. The harness either writes the handover automatically (preserving cold-start fidelity for the next session) or doesn't (next session starts cold and the user re-explains context). The first option dominates; the asking step is dead weight. v0.14.0 deletes the asking step.
+
+**Falsifier:** if the user opens a new session and asks *"what was I doing?"* / *"where were we?"* / *"any handover?"*, the protocol failed — the previous session's RESUME doc didn't orient the new session. Recalibrate format.
+
+### Affected templates
+
+- `templates/skills/supervisor/SKILL.md` — Hard Rule #7 reworded, new Hard Rule #8, `mode: handover` rewritten with MANDATORY-AUTO triggers + 7-section RESUME spec + auto-execution checklist + commit-msg-convention, `NEXT MOVE` block updated with `Handover:` field, "break" → "new session" throughout user-facing output
+- `package.json` — version 0.14.0
+
+### Migration notes (existing v0.13.x installations)
+
+1. **Re-run `/init` is NOT required.**
+2. **Replace your supervisor SKILL's Hard Rules #7 and #8** with the v0.14.0 versions. The new #8 is structurally important — without it, the supervisor will keep asking permission to write handovers.
+3. **Replace your supervisor SKILL's `### mode: handover` section** with the v0.14.0 version. The protocol is now MANDATORY-AUTO with 5 explicit triggers.
+4. **Update your supervisor's NEXT MOVE template** to include the `Handover:` line.
+5. **Optional (recommended):** add a global `~/.claude/CLAUDE.md` rule mirroring the auto-handover trigger list, so the harness fires the handover even when the user invokes `/supervisor` from a project that hasn't yet upgraded its local SKILL spec.
+
+---
+
 ## [0.13.0] — 2026-05-01 · `mode: uat-deep-sweep` — multi-persona render-layer UAT
 
 A new supervisor mode for the case `uat-sweep` cannot solve: when you don't trust a recent UAT verdict (different model, partial coverage, post-hoc skepticism). `uat-deep-sweep` dispatches **N existing analysis-team specialists in render-layer-only mode** against each "not-guaranteed-pass" component, in parallel, on dedicated playwriter tabs. Each specialist applies its discipline as a **lens** on the live page — closing the cross-cutting drift gap a single-lens smoke can't catch.

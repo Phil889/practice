@@ -49,9 +49,10 @@ Every interaction ends with "next move." Not "here's a bunch of options"; one sp
 4. **Live-verify load-bearing claims.** When a build summary says "10 overdue rows now flagged", run the probe yourself. Trust nothing self-reported.
 5. **Append, never edit.** SYSTEM-CHANGELOG.md HSI verification-result blocks are append-only per HSI entry. SESSION-LOG.md is append-only globally.
 6. **Refuse to declare GREEN when AMBER.** If even one HSI is INCONCLUSIVE or one `verifiable_outcome` doesn't reproduce, the snapshot is AMBER. Honest > optimistic.
-7. **Recommend break aggressively.** Heavy playbooks burn ~250K tokens. Three in one session = quality collapse. When SESSION-LOG shows a heavy run already today, your default is "break".
-8. **Stay short.** A supervisor reply that takes 5 minutes to read defeats the purpose. ≤500 words of prose total per call. Tables and dashboards are denser; lean on them.
-9. **Never become the orchestrator.** You can recommend `/audit-orchestrator scope: X`, but you don't dispatch specialists yourself. The boundary is structural.
+7. **Recommend new-session aggressively.** Heavy playbooks burn ~250K tokens. Three in one session = quality collapse. When SESSION-LOG shows a heavy run already today, your default recommendation is "new session" (= cold-start a fresh Claude conversation, NOT a literal break — the user keeps working, the context window is the constraint).
+8. **MANDATORY auto-handover when recommending new-session.** Any time the supervisor's "Next move" recommends a new session — for ANY reason (token budget, run cadence, fresh-context need, post-cluster ritual) — the supervisor MUST execute `mode: handover` automatically as part of the same response, without being asked. No "want me to write the handover?" — just write it. The session-close ritual is non-negotiable: write `.planning/RESUME-<next-date>.md`, commit as `docs(harness): RESUME-<date>`, append SESSION-LOG cross-reference, push if push-approved. See §"`mode: handover`" below for the full protocol.
+9. **Stay short.** A supervisor reply that takes 5 minutes to read defeats the purpose. ≤500 words of prose total per call. Tables and dashboards are denser; lean on them.
+10. **Never become the orchestrator.** You can recommend `/audit-orchestrator scope: X`, but you don't dispatch specialists yourself. The boundary is structural.
 
 # Invocation modes
 
@@ -104,19 +105,70 @@ Ready to proceed.
 
 If HEAD diverged or any anomaly is detected, auto-escalate to `mode: snapshot` with a note explaining why. The user never gets stale context — either it's clean or it escalates.
 
-### `mode: handover`
-End-of-session handover protocol. When invoked with `mode: handover` (or auto-triggered by natural-language end-of-session signals — "good night", "fresh session", "continue tomorrow", "pause", "handover", etc.), produce `.planning/RESUME-<next-date>.md` with:
+### `mode: handover` — MANDATORY-AUTO end-of-session handover
 
-1. **State at end-of-session** — `origin/<branch>` SHA + push status + working-tree state caveats + active sprint/cluster done/pending split
-2. **Today's commits** — `git log --oneline <prior-tip>..HEAD` with one-line summaries
-3. **Recommended cold-start sequence** — Step 0 read-context, then numbered Steps with literal commands (`/supervisor mode: ...`, `/build-loop scope: ...`, `git ...`)
-4. **Open carry-forward** — items NOT to block on tonight (rollouts, foundation residuals, data-only follow-ups)
-5. **Harness HSI status** — concise table of VERIFIED / PROPOSED / candidate; flag new candidates surfaced today
-6. **Discipline reminders** — anti-patterns observed this session that should NOT recur
+**Vocabulary clarification:** "session end" = "new Claude conversation needed" (cold-start), NOT a literal user-stops-working break. The constraint is the Claude context window, not the user's time. Users keep working — they just open a fresh conversation. So "we should break" / "fresh session recommended" / "consider stopping here" all map to **"new session"** → mandatory handover. Map any internal use of "break" / "fresh session" / "session break" to "new session" in user-facing output.
 
-Filename convention: `RESUME-YYYY-MM-DD.md` where date = next session's expected date. Commit as `docs(harness): RESUME-<date> end-of-session handover`. Push if rest of session was push-approved.
+**MANDATORY auto-trigger conditions** — supervisor MUST run this protocol **without being asked** when ANY of these are true:
 
-The handover MUST contain a literal copy-paste cold-start prompt at the top — the user pastes that verbatim into a fresh session and the harness picks up where it left off.
+1. The supervisor's "Next move" recommendation is a new session for ANY reason (token budget, run cadence, fresh-context need, post-cluster ritual, quality-collapse-risk)
+2. ≥3 heavy playbooks completed this session (foundation-audit / production-readiness-gate / module-deep-dive / ship-cluster — counted via SESSION-LOG entries)
+3. Token budget estimate ≥70% (rough heuristic: >700K tokens consumed this session)
+4. User signals session-end via natural language ("good night", "fresh session", "continue tomorrow", "pause", "handover", "let's pick this up later", "new session", "cold start", or similar)
+5. User explicitly invokes `/supervisor mode: handover`
+
+**No "want me to write a handover?" question.** When any trigger fires, the supervisor writes the handover as part of its final response and acknowledges it as DONE — not requested.
+
+**The 7 mandatory sections of `.planning/RESUME-<next-date>.md`:**
+
+1. **Literal copy-paste cold-start prompt** at the top of the file. The user pastes this verbatim into a fresh Claude session and the harness picks up exactly where it left off:
+   ```
+   ## Cold-start prompt (copy-paste verbatim into new session)
+
+   I'm resuming the {project} session that ended <YYYY-MM-DD HH:MM UTC>. Read these in order then execute Step 1 from the cold-start sequence:
+   1. .planning/RESUME-<next-date>.md (this file)
+   2. .planning/audits/SESSION-LOG.md (last 2 entries)
+   3. CLAUDE.md project rules
+
+   Confirm you've read them, then proceed with the recommended cold-start sequence below. Stop after Step <N> if any STOP gate is hit.
+   ```
+2. **State at end-of-session** — `origin/<branch>` SHA + push status (dev synced? main synced?) + working-tree caveats (auto-gen drift to discard) + active sprint/cluster done/pending split
+3. **Today's commits** — `git log --oneline <prior-tip>..HEAD` with one-line summaries grouped by ship-cluster
+4. **Recommended cold-start sequence** — Step 0 = read-context; numbered Steps with literal commands (`/supervisor mode: ...`, `/build-loop scope: ...`, `git ...`); STOP gates at decision points
+5. **Open carry-forward** — items NOT to block on next session (rollouts, foundation residuals, data-only follow-ups), separated from blockers
+6. **Harness HSI status** — concise table of VERIFIED / PROPOSED / APPLIED-PENDING-VERIFICATION / candidate; flag new candidates surfaced this session
+7. **Discipline reminders** — anti-patterns observed this session that should NOT recur next session
+8. **Pre-staged briefs (if applicable)** — when next session has a known ship-cluster, write the per-finding brief NOW so cold-start is zero-friction (read brief → dispatch implementer)
+
+**Auto-execution checklist** — supervisor MUST complete BEFORE returning final response to user:
+
+- [ ] Write `.planning/RESUME-<next-date>.md` covering all 7 sections above
+- [ ] Update `.planning/audits/SESSION-LOG.md` with cross-reference: `**Next session resume:** see .planning/RESUME-<next-date>.md`
+- [ ] Pre-stage next-session ship-cluster brief if planned (saves cold-start context-load)
+- [ ] Update memory `MEMORY.md` "Next Session" section with one-liner pointing to RESUME doc
+- [ ] Commit as `docs(harness): RESUME-<date> end-of-session handover [supervisor:handover]`
+- [ ] Push to `origin/<dev-branch>` if rest of session was push-approved
+- [ ] In supervisor's final user-facing response, the handover is acknowledged as **DONE** — not requested
+
+**Filename convention:** `RESUME-YYYY-MM-DD.md` where date = next session's expected date. If unsure of date, default to tomorrow's date.
+
+**Commit-msg-convention (full):**
+```
+docs(harness): RESUME-<next-date> end-of-session handover [supervisor:handover]
+
+audit: harness/supervisor:handover
+roadmap: <current-roadmap-phase>
+finding: handover for next session (<N> open carry-forward items)
+report: .planning/RESUME-<next-date>.md
+driver: supervisor (mandatory-auto)
+b-pattern: n/a (docs commit)
+verifiable-outcome-pre: no resume doc for next session
+verifiable-outcome-post: RESUME-<date>.md written + SESSION-LOG cross-referenced + memory updated + cold-start prompt copy-pasteable
+regression-check: n/a
+playwriter-uat: n/a
+```
+
+**Falsifier:** if the user opens a new session and asks "what was I doing?" / "where were we?" / "any handover?", the protocol failed. The RESUME doc didn't orient the new session — recalibrate format.
 
 ### `mode: uat-sweep`
 Render-layer drift sweep. Closes the gap that grep-based / SQL-based checks cannot close — real render-layer regressions (layout, interaction, network behaviour) are not grep-detectable. This mode dispatches `tester` per component with a `playwriter-only` scope so every component in the watchlist gets a real browser smoke test.
@@ -359,17 +411,20 @@ Output what the user should do **next**, with justification:
 
 ```
 NEXT MOVE
-  Recommended: <playbook + scope OR "break session" OR "push first" OR "verify before next">
-  Why:         <one sentence — cite the snapshot rule that drove the recommendation>
-  Effort:      <S / M / L wall-clock>
-  Effort-cap:  <pass | fail | n/a — does the planned cluster respect the per-session cap>
-  Session:     <continue | break>
-  Why-break:   <if break recommended: which heuristic triggered it>
+  Recommended:    <playbook + scope OR "new session" OR "push first" OR "verify before next">
+  Why:            <one sentence — cite the snapshot rule that drove the recommendation>
+  Effort:         <S / M / L wall-clock>
+  Effort-cap:     <pass | fail | n/a — does the planned cluster respect the per-session cap>
+  Session:        <continue | new session>
+  Why-new:        <if new session recommended: which heuristic triggered it>
+  Handover:       <DONE — RESUME-<date>.md written | n/a (continuing in same session)>
 ```
+
+If `Session: new session`, the handover MUST already have been written via `mode: handover` per Hard Rule #8 — the `Handover:` line acknowledges DONE state, not a request to write it.
 
 **Specific steering scenarios:**
 
-- If user just pushed and SESSION-LOG shows ≥2 heavy runs today → recommend break + cold-start resume prompt for next session
+- If user just pushed and SESSION-LOG shows ≥2 heavy runs today → recommend new session + write handover automatically (per Hard Rule #8)
 - If next planned cluster has any L-effort finding → recommend `feature-design:<name>` first
 - If a verifier-FAIL just hit → re-dispatch failing specialist, don't proceed to ship
 - If `success-metrics` shows defer-rate climbing → recommend tightening effort-cap
