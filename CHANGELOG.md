@@ -8,7 +8,7 @@ Format: [version] — date · one-line summary, followed by What's new / Affecte
 
 ## [0.12.0] — 2026-05-01 · npx installer + render-layer UAT mandate + designer-protocol enforcement + handover/uat-sweep modes
 
-The first release with a one-line install. New CLI bridges practice into any git repo via `npx`, optionally pre-wiring the two companion tools the harness leans on most: the [Karpathy guidelines skill](https://github.com/forrestchang/andrej-karpathy-skills) and the [Playwriter browser bridge](https://github.com/remorses/playwriter). Plus seven harness evolutions ported from the production Zenith run.
+The first release with a one-line install. New CLI bridges practice into any git repo via `npx`, optionally pre-wiring the two companion tools the harness leans on most: the [Karpathy guidelines skill](https://github.com/forrestchang/andrej-karpathy-skills) and the [Playwriter browser bridge](https://github.com/remorses/playwriter). Plus seven harness evolutions ported from the production compliance-platform run.
 
 ### What's new
 
@@ -82,7 +82,7 @@ Promotes the commit-message convention to a canonical reference inside the quali
 
 ## [0.11.0] — 2026-04-29 · Harness robustness: auto-vocabulary, brief ceilings, warm-start, specialist heuristic
 
-Five field-validated improvements ported from the production Zenith harness. All reduce token waste and eliminate recurring maintenance friction without sacrificing audit-grade quality.
+Five field-validated improvements ported from the production compliance-platform harness. All reduce token waste and eliminate recurring maintenance friction without sacrificing audit-grade quality.
 
 ### What's new
 

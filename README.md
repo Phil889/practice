@@ -375,12 +375,12 @@ The most-instructive one: [`examples/hsi-self-improvement.md`](examples/hsi-self
 
 ## 🌱 Origins
 
-`practice` is the harness extracted from **[Zenith](https://zenithq-dev.vercel.app)** — a multi-norm QMS application where 9 specialist agents, 4 orchestrator skills, 5 workflows, and an evidence-grounded loop have shipped audited compliance work for ISO 9001, 14001, 45001, 27001, and GDPR since early 2026.
+`practice` is the harness extracted from a production **advanced compliance-based company-management application** — a multi-norm platform where 9 specialist agents, 4 orchestrator skills, 5 workflows, and an evidence-grounded loop have shipped audited compliance work for ISO 9001, 14001, 45001, 27001, and GDPR since early 2026.
 
 In the first marathon session of harness use, the system:
 - Audited its own foundation across 6 specialists in parallel
 - Cluster-shipped 7 of 10 P0/P1 findings
-- Caught itself adapting specs to reality (`zenith-designer` discovered no `/suppliers/[id]` route existed and rewrote the spec mid-Phase-2)
+- Caught itself adapting specs to reality (the `designer` agent discovered no `/suppliers/[id]` route existed and rewrote the spec mid-Phase-2)
 - Ran the HSI loop captured in [`examples/hsi-self-improvement.md`](examples/hsi-self-improvement.md) — six self-improvement iterations, all VERIFIED on disk
 
 **The pattern is real. It's not a research project. It ships.**

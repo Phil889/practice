@@ -75,7 +75,7 @@ Every report's Self-Check has a Confidence: high/medium/low statement. Spot-chec
 
 ### Q6 — Designer-protocol enforcement (when a designer agent is in the run)
 
-If the project has a `designer`-style agent (e.g. `zenith-designer`, `ui-designer`) and it ran in the audit, the verifier enforces these content checks (the deterministic verifier already checks heading presence; Q6 covers the *content* of those headings):
+If the project has a `designer`-style agent (e.g. `ui-designer`, `dashboard-designer`) and it ran in the audit, the verifier enforces these content checks (the deterministic verifier already checks heading presence; Q6 covers the *content* of those headings):
 
 1. **Competitive-analyst citation present.** Grep the report for `competitive-analyst/` (or the project's parity-source agent) — must cite at least one report by filename + section anchor. If absent → FAIL ("designer skipped competitive grounding pre-read").
 2. **Dark/Light token map populated.** The report has the `## Dark / Light mode token map` heading; check the table beneath has ≥6 token rows AND every row lists both light + dark tokens (no `—` placeholders, no "TBD"). Empty table or token columns blank → FAIL.
