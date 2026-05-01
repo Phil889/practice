@@ -146,6 +146,114 @@ Render-layer drift sweep. Closes the gap that grep-based / SQL-based checks cann
 
 **Posture rule — Tier-1 FAIL → AMBER.** Define a Tier-1 components list per project (highest-traffic, load-bearing). If any Tier-1 component returns FAIL, posture flips to **AMBER** and supervisor recommends *"STOP further ship. Fix uat-sweep findings first."* Non-Tier-1 FAILs add to backlog but do not block current ship-cluster unless ≥2 non-Tier-1 components FAIL.
 
+### `mode: uat-deep-sweep`
+Multi-persona render-layer UAT. Where `mode: uat-sweep` runs ONE playwriter smoke per component, `uat-deep-sweep` dispatches **N existing analysis-team specialists in render-layer-only mode** against each "not-guaranteed-pass" component, in parallel, on dedicated playwriter tabs. Each specialist applies its discipline as a **lens** on the live page — closing the cross-cutting drift gap a single-lens smoke can't catch (a page can pass design checks, fail compliance checks, pass console checks, fail workflow checks, and a single-lens tester won't see it).
+
+**When to invoke:**
+- After a model swap (e.g. Sonnet ↔ Opus) — re-validate with the better model
+- Before a major release / customer demo
+- When a prior `uat-sweep` PASSED but you don't trust the result (different model, partial coverage, post-hoc skepticism)
+- After an `audit-orchestrator` synthesis surfaces cross-cutting drift suspicions
+
+**Invoke:**
+```
+/supervisor mode: uat-deep-sweep
+/supervisor mode: uat-deep-sweep target: https://staging.example.com
+/supervisor mode: uat-deep-sweep components: <slug-1>,<slug-2>
+/supervisor mode: uat-deep-sweep personas: qmb,qa,workflow,ai,design
+/supervisor mode: uat-deep-sweep --include-guaranteed
+```
+
+**Default target:** project-configured staging URL (assumes user is already logged into Chrome — playwriter inherits cookies from the default browser context).
+**Default personas:** all available specialists with a render-layer-applicable lens (typically 4–5 per project).
+**Default components:** auto-derived via the not-guaranteed-pass filter below.
+
+**Filter — "not-guaranteed-pass" only (default):**
+
+A component is **guaranteed pass** when ALL three hold:
+
+1. Last UAT-LOG entry for the component is `PASS`
+2. Last PASS is within the last 7 days
+3. Zero commits touched the component's route since the last PASS:
+   ```bash
+   git log --oneline <last-uat-sha>..HEAD -- <route-path> | wc -l   # must equal 0
+   ```
+
+Otherwise the component is not-guaranteed and gets deep-swept. Components with no UAT-LOG entry are always not-guaranteed. Pass `--include-guaranteed` to override.
+
+**Personas — lenses mapped to existing specialists:**
+
+Each persona is an **existing analysis-team specialist invoked in playwriter-only render-layer mode**. They don't read code — they drive the live page and apply their discipline. Map per project; the canonical 5 lenses:
+
+| Persona | Mapped specialist | Lens — what they check on the live page |
+|---|---|---|
+| `qmb` (compliance) | `regulatory-officer` | Required fields visible, audit trail readable, retention surfaced, exports work, regulatory-tags present where mandated |
+| `ceo` (executive) | `competitive-analyst` (executive-reader scope) | KPIs above the fold, scannable in <30s, drilldowns make sense, no broken links, executive-readable copy |
+| `qa` (engineering) | `qa-engineer` | Zero console errors, zero failed network calls, no React hydration mismatches, locale-prefix correct, axe accessibility ≥AA |
+| `workflow` (process) | `workflow-architect` | Click-paths between modules don't dead-end, state persists across navigation, "next step" CTAs land correctly, role/permission gates enforced |
+| `ai-design` (UX + AI) | `ai-strategist` + `designer` (combined) | AI proposals/insights surfaced where expected, layout matches latest spec, dark/light parity, copy in correct locale, loading/empty/error states tasteful |
+
+Each persona uses **playwriter only** — no SQL, no grep, no filesystem checks. Render-layer evidence only.
+
+**Parallel-tab orchestration:**
+
+- **Tab ID format:** `<component-slug>-<persona-slug>` (e.g. `audits-execute-qmb`, `audits-execute-qa`). Each persona gets a dedicated tab so they don't fight for browser state mid-test.
+- **Cookies:** all tabs inherit from the user's logged-in Chrome session (Playwriter session 1, default browser context — `playwriter` reuses the running Chrome with all auth state intact).
+- **Page count cap:** N personas × M components ≤ **25 simultaneous tabs**. If the matrix exceeds 25, the supervisor batches: dispatch cohort 1 (≤5 components × 5 personas = 25 tabs), wait for all to return, dispatch cohort 2.
+- **Cleanup:** each tester closes its own tab before returning. Supervisor sweeps any orphaned tabs at end-of-mode.
+
+**Dispatch prompt template (per persona):**
+
+```
+Agent({
+  description: "uat-deep <component> <persona>",
+  subagent_type: "<mapped-specialist>",
+  prompt: "playwriter-only deep UAT for component: <component-slug>
+Tab ID: <component-slug>-<persona-slug>
+Inherit cookies: session-1 (logged-in Chrome, default browser context — DO NOT open a new context, DO NOT re-authenticate)
+Persona: <persona>
+Lens checklist: <pasted from persona table above>
+Route: <full URL — target + route from component-table>
+Setup steps: <any preconditions, e.g. 'open record X' or 'switch to org Y'>
+Interactions to drive: <step-by-step from component-table>
+Screenshots: capture each lens-check to .planning/audits/_screenshots/uat-deep-sweep-<YYYY-MM-DD>/<component>/<persona>/<step>.png
+
+Return verdict per lens-check (PASS/FAIL/WARN) with evidence pointers to screenshots + console excerpts + network HAR slices + axe violations (qa only).
+
+FORBID: no SQL queries, no grep checks, no filesystem reads of code — render-layer only. You are NOT analysing the codebase; you are driving the live page."
+})
+```
+
+**Verdict aggregation per component:**
+
+| Aggregate verdict | Trigger | Posture impact |
+|---|---|---|
+| **PASS** | All N personas PASS | GREEN — component re-verified |
+| **PASS-WITH-WARNINGS** | All PASS but ≥1 WARN from any persona | GREEN, log warnings in finding |
+| **PARTIAL-FAIL** | 1 persona FAIL, others PASS | AMBER — log finding for failing lens; component still deployable |
+| **FAIL** | ≥2 personas FAIL OR any **Tier-1 component** fails any lens | AMBER — block ship-cluster until fixed |
+| **HARD-FAIL** | All N personas FAIL | RED — component broken at the render layer |
+
+**Output:**
+
+1. **Append rows to `.planning/audits/UAT-LOG.md`** — one row **per persona per component** (5N rows for N components):
+   ```
+   | <YYYY-MM-DD> | <component> | uat-deep-sweep:<persona> | audit-team-uat-sweep | <last-sha> | PASS/WARN/FAIL | <screenshot-path> |
+   ```
+2. **Auto-file FAILs as findings** at `.planning/audits/_findings-status/UAT-DEEP-<YYYY-MM-DD>-<component>-<persona>.md`. Each finding cites the persona's failing lens-check, the screenshot, the console/network evidence, and the recommended next step (typically: dispatch implementer with the finding).
+3. **Print sweep summary** with per-component matrix (component × persona = verdict) and an aggregate verdict column.
+4. **Print posture flip** if any Tier-1 component returned anything below PASS.
+
+**Anti-patterns:**
+
+- Do not skip the "not-guaranteed-pass" filter unless explicitly overridden — wastes browser tabs on already-verified components.
+- Do not let two personas share a tab id — tabs collide on navigation; verdicts become non-attributable.
+- Do not run >5 personas at once — beyond 5, marginal-evidence-per-tab drops sharply and the matrix becomes unreadable.
+- Do not let any persona fall back to SQL/grep/Read — the whole point is render-layer evidence. If a specialist can't form a verdict from the live page alone, that's a WARN, not a license to escape the sandbox.
+- Do not declare a component PASS based on majority vote — PARTIAL-FAIL is its own outcome; do not silently soften it to PASS.
+- Do not skip cookies-inherit — uncached login flows produce flaky verdicts and waste Chrome sessions.
+- Do not exceed 25 simultaneous tabs — batch instead. The browser slows below usability past ~25 active pages.
+
 ### `mode: talk:<question>`
 Free-form conversational mode. The user asks a question, you synthesise across all artefacts and answer. Examples — "should we ship module X next or fix the escalated F-007 first?", "what did the datenschutz cluster actually reveal that the synthesis didn't capture?", "is our backlog growing faster than we ship?". You can use any read-tool to investigate. **You still end with a steered next-move recommendation.**
 

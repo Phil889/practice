@@ -6,6 +6,53 @@ Format: [version] — date · one-line summary, followed by What's new / Affecte
 
 ---
 
+## [0.13.0] — 2026-05-01 · `mode: uat-deep-sweep` — multi-persona render-layer UAT
+
+A new supervisor mode for the case `uat-sweep` cannot solve: when you don't trust a recent UAT verdict (different model, partial coverage, post-hoc skepticism). `uat-deep-sweep` dispatches **N existing analysis-team specialists in render-layer-only mode** against each "not-guaranteed-pass" component, in parallel, on dedicated playwriter tabs. Each specialist applies its discipline as a **lens** on the live page — closing the cross-cutting drift gap a single-lens smoke can't catch.
+
+### What's new
+
+**`supervisor` SKILL — `mode: uat-deep-sweep`.**
+Multi-persona render-layer UAT. Default 5 lenses (mappable per project to your specialist roster):
+
+| Persona | Mapped specialist | Lens |
+|---|---|---|
+| `qmb` | regulatory-officer | Compliance + audit-trail visibility |
+| `ceo` | competitive-analyst (executive scope) | KPIs above the fold, executive readability |
+| `qa` | qa-engineer | Console + network + accessibility + locale |
+| `workflow` | workflow-architect | Cross-module click-paths + state persistence |
+| `ai-design` | ai-strategist + designer combined | AI surfacing + dark/light parity + spec match |
+
+**Parallel-tab orchestration.**
+Each persona-tester gets a dedicated playwriter tab (ID format: `<component>-<persona>`) so personas don't fight for browser state. All tabs inherit cookies from the user's logged-in Chrome session — no re-authentication. Cap: 25 simultaneous tabs (5×5); larger matrices auto-batch.
+
+**"Not-guaranteed-pass" filter.**
+Default behaviour skips components where the last UAT-LOG entry is PASS, within 7 days, AND zero commits touched the component's route since. Override with `--include-guaranteed`. Saves 80%+ of dispatch overhead on routine re-runs.
+
+**Verdict aggregation rubric.**
+- All PASS → component PASS
+- 1 FAIL → PARTIAL-FAIL (deployable but flagged)
+- ≥2 FAIL OR Tier-1 fail → component FAIL (block ship-cluster)
+- All FAIL → HARD-FAIL
+
+**Output.**
+UAT-LOG.md gains 5N rows per sweep (one per persona × component). FAILs auto-file as findings at `_findings-status/UAT-DEEP-<date>-<component>-<persona>.md`. Sweep summary prints a component × persona verdict matrix.
+
+### Affected templates
+
+- `templates/skills/supervisor/SKILL.md` — new `### mode: uat-deep-sweep` section + entry in mode-list
+- `package.json` — version 0.13.0
+
+### Migration notes (existing v0.12.x installations)
+
+1. **Re-run `/init` is NOT required.**
+2. **Copy the `### mode: uat-deep-sweep` section** from `templates/skills/supervisor/SKILL.md` into your `.claude/skills/<your-supervisor>/SKILL.md` mode list.
+3. **Map your project's specialists to lenses.** The canonical 5 personas assume you have `regulatory-officer`, `competitive-analyst`, `qa-engineer`, `workflow-architect`, and `ai-strategist` + `designer`. Substitute your own (e.g. for a fintech harness: `qmb` → `compliance-officer`, `ai-design` → `risk-modeler` + `ux-reviewer`).
+4. **Define your project's component lookup table** in the supervisor (route + interaction + DOM assertion per component slug) — the same table `mode: uat-sweep` uses; `uat-deep-sweep` reads from it.
+5. **Install Playwriter** if you haven't (`npx github:Phil889/practice init --with-playwriter`). The deep sweep is playwriter-only by mandate.
+
+---
+
 ## [0.12.0] — 2026-05-01 · npx installer + render-layer UAT mandate + designer-protocol enforcement + handover/uat-sweep modes
 
 The first release with a one-line install. New CLI bridges practice into any git repo via `npx`, optionally pre-wiring the two companion tools the harness leans on most: the [Karpathy guidelines skill](https://github.com/forrestchang/andrej-karpathy-skills) and the [Playwriter browser bridge](https://github.com/remorses/playwriter). Plus seven harness evolutions ported from the production compliance-platform run.
