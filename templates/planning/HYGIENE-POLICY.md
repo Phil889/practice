@@ -18,6 +18,35 @@ The supervisor enforces this policy. Run `/supervisor mode: hygiene` to audit an
 
 When a soft cap trips, supervisor recommends a hygiene run. When a hard cap trips, supervisor refuses to run any heavy playbook until hygiene runs — the system is in protective mode.
 
+---
+
+## What "active/upcoming work" means (the cross-reference anchor)
+
+**Don't archive by date alone.** A blunt 14-day timer keeps irrelevant entries and archives still-cited ones. Instead, an artefact stays active when it is referenced by any of:
+
+1. **Open findings** — any `_findings-status/<id>.md` with status `OPEN`, `ESCALATED`, `VERIFIED-PENDING-*`
+2. **Pending HSIs** — any `SYSTEM-CHANGELOG.md` entry with status `APPLIED-PENDING-VERIFICATION`, `PROPOSED`, or `REGRESSED`
+3. **ROADMAP active phases** — any phase checkbox `[ ]` not yet ticked
+4. **Scheduled FRs** — any `_feature-requests/FR-*.md` with status `scheduled` or `triaged`
+5. **Current session** — the bottom entry in `SESSION-LOG.md` (always kept)
+
+**Task-complete check:** an artefact's task is "complete" when:
+- Finding: status = `VERIFIED` OR `ABANDONED` (no time delay — if it's done, it's done)
+- HSI: status = `APPLIED-VERIFIED` + 3 supervisor passes confirmed
+- Session entry: all findings/HSIs it references are archived OR have no active cross-references
+- Specialist report: not cited by any active finding or HSI
+
+**Archive trigger:** task is complete AND no active cross-reference points to it.
+
+**How to check cross-references:**
+- For a **finding ID** `F-XXX`: grep `SESSION-LOG.md` + `SYSTEM-CHANGELOG.md` + active `_findings-status/` files. If found → finding stays active.
+- For an **HSI number** `HSI-NNN`: grep `SESSION-LOG.md` + active finding status files + build summaries. If found → HSI stays active.
+- For a **session entry**: check if any active finding or HSI cites it (by date or finding IDs listed). If not cited → eligible for archive once its own tasks are complete.
+
+The first time a project switches from time-based to cross-reference-anchored hygiene, expect a 50–70% reduction in active SESSION-LOG size. Nothing is lost — git history has everything; archive just moves from active view to `_archive/`.
+
+---
+
 ## Retention rules per artefact
 
 ### `SYSTEM-CHANGELOG.md` — HSI iteration log

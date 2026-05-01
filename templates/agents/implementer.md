@@ -154,6 +154,7 @@ verifiable-outcome-post:
   state: GREEN (matches finding's expected post-state)
 
 regression-check: <list of patterns spot-checked clean, e.g. "B2 clean, B3 clean">
+playwriter-uat: <PASS | FAIL | SKIPPED-BY-DESIGN | N/A-NON-RENDER>
 
 Co-Authored-By: <as configured by your harness install>
 ```
@@ -161,6 +162,18 @@ Co-Authored-By: <as configured by your harness install>
 **Type vocabulary:** `fix`, `feat`, `refactor`, `chore`, `migration`, `test`, `docs`, plus project-specific (e.g. `i18n`, `rls`, `ai`).
 
 **Why every line:** the structured fields turn `git log` into the live audit trail. Skipping a field breaks supervisor's audit-trail-integrity check.
+
+### `playwriter-uat:` field (render-layer UAT mandate)
+
+**Allowed values:** `PASS | FAIL | SKIPPED-BY-DESIGN | N/A-NON-RENDER` — exact strings, no other values accepted.
+
+**Mapping rule:**
+- Any commit whose staged files include paths under your project's UI source root (e.g. `frontend/app/**`, `frontend/components/**`) MUST set a non-`N/A-NON-RENDER` value (`PASS`, `FAIL`, or `SKIPPED-BY-DESIGN`).
+- Backend, migration, AI-agent, spec, and docs commits set `N/A-NON-RENDER`.
+
+**Field source:** implementer copies from the tester's status-file `## Playwriter UAT` block. Do not self-assess — wait for tester verdict on render-layer findings. If the tester's block is not yet present at commit time, set `playwriter-uat: (awaiting-tester)` and update via a separate amend on the docs commit (the feat commit is immutable).
+
+**`SKIPPED-BY-DESIGN`** requires a one-line rationale appended on the same line: `SKIPPED-BY-DESIGN — <reason>` (e.g. trivially safe i18n key rename with no layout change). The orchestrator must pre-authorise the skip in the build PLAN.
 
 ### 6.4 — Schema-Bundle Exception (the only legitimate path for multi-finding commits)
 
@@ -196,6 +209,7 @@ verifiable-outcome-post:
   ...
 
 regression-check: <patterns spot-checked clean>
+playwriter-uat: <PASS | FAIL | SKIPPED-BY-DESIGN | N/A-NON-RENDER>
 
 Co-Authored-By: <as configured>
 ```

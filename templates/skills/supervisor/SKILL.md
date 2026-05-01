@@ -104,6 +104,48 @@ Ready to proceed.
 
 If HEAD diverged or any anomaly is detected, auto-escalate to `mode: snapshot` with a note explaining why. The user never gets stale context — either it's clean or it escalates.
 
+### `mode: handover`
+End-of-session handover protocol. When invoked with `mode: handover` (or auto-triggered by natural-language end-of-session signals — "good night", "fresh session", "continue tomorrow", "pause", "handover", etc.), produce `.planning/RESUME-<next-date>.md` with:
+
+1. **State at end-of-session** — `origin/<branch>` SHA + push status + working-tree state caveats + active sprint/cluster done/pending split
+2. **Today's commits** — `git log --oneline <prior-tip>..HEAD` with one-line summaries
+3. **Recommended cold-start sequence** — Step 0 read-context, then numbered Steps with literal commands (`/supervisor mode: ...`, `/build-loop scope: ...`, `git ...`)
+4. **Open carry-forward** — items NOT to block on tonight (rollouts, foundation residuals, data-only follow-ups)
+5. **Harness HSI status** — concise table of VERIFIED / PROPOSED / candidate; flag new candidates surfaced today
+6. **Discipline reminders** — anti-patterns observed this session that should NOT recur
+
+Filename convention: `RESUME-YYYY-MM-DD.md` where date = next session's expected date. Commit as `docs(harness): RESUME-<date> end-of-session handover`. Push if rest of session was push-approved.
+
+The handover MUST contain a literal copy-paste cold-start prompt at the top — the user pastes that verbatim into a fresh session and the harness picks up where it left off.
+
+### `mode: uat-sweep`
+Render-layer drift sweep. Closes the gap that grep-based / SQL-based checks cannot close — real render-layer regressions (layout, interaction, network behaviour) are not grep-detectable. This mode dispatches `tester` per component with a `playwriter-only` scope so every component in the watchlist gets a real browser smoke test.
+
+**Invoke:**
+```
+/supervisor mode: uat-sweep
+/supervisor mode: uat-sweep components: <slug-1>,<slug-2>,<slug-3>
+```
+
+**Input — two paths:**
+
+1. **Explicit component-list** — comma-separated. Supervisor dispatches exactly those components, in that order.
+2. **Auto-derived from UAT-LOG drift-watchlist** — if no `components:` arg is given, supervisor reads `.planning/audits/UAT-LOG.md`, computes for each component: days since last UAT + commit-count-since-last-UAT (`git log --oneline <last-uat-sha>..HEAD -- <route-path> | wc -l`). Any component with **last-UAT > 14 days AND ≥1 commit since** is included. Components missing from UAT-LOG are treated as "never UAT'd" and always included.
+
+**Component → route + interaction lookup:** Maintain a `components` table mapping each watched component slug to its route + primary interaction + DOM assertion. Expand iteratively as new components enter production.
+
+**Behaviour — per component:**
+
+1. **Resolve route** from the lookup table. If unknown, log `UNKNOWN-COMPONENT: <slug>` as WARN and skip (do not abort the sweep).
+2. **Dispatch `tester` via Agent tool** with playwriter-only scope: `Route: <route> · Interaction: <interaction> · Screenshots: capture to .planning/audits/_screenshots/uat-sweep-<date>/<slug>/ · Return PASS or FAIL with screenshot path. FORBID: no SQL queries, no grep checks — render-layer only.`
+3. **Collect verdict** — tester returns `PASS` or `FAIL` with screenshot path.
+
+**FORBID — grep/SQL fallbacks from this mode:** Tester invoked from `uat-sweep` mode MUST run `playwriter` as the only verification path. No `grep`, no `SELECT`, no `curl`, no filesystem checks. This is exactly the gap `uat-sweep` closes — grep-detectable checks already run elsewhere.
+
+**Output:** Append rows to `.planning/audits/UAT-LOG.md`, auto-file FAILs as findings at `.planning/audits/_findings-status/UAT-SWEEP-<date>-<slug>.md` (status `OPEN`), and print a sweep summary.
+
+**Posture rule — Tier-1 FAIL → AMBER.** Define a Tier-1 components list per project (highest-traffic, load-bearing). If any Tier-1 component returns FAIL, posture flips to **AMBER** and supervisor recommends *"STOP further ship. Fix uat-sweep findings first."* Non-Tier-1 FAILs add to backlog but do not block current ship-cluster unless ≥2 non-Tier-1 components FAIL.
+
 ### `mode: talk:<question>`
 Free-form conversational mode. The user asks a question, you synthesise across all artefacts and answer. Examples — "should we ship module X next or fix the escalated F-007 first?", "what did the datenschutz cluster actually reveal that the synthesis didn't capture?", "is our backlog growing faster than we ship?". You can use any read-tool to investigate. **You still end with a steered next-move recommendation.**
 

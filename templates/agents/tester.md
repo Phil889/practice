@@ -29,6 +29,29 @@ You write your verdict to the same `.planning/audits/_findings-status/<finding-i
 
 {{VERIFICATION_PROTOCOL_TABLE}}
 
+## Render-layer playwriter UAT mandate
+
+**Trigger:** a finding cites ANY path under your project's UI source root (e.g. `frontend/app/**`, `frontend/components/**`, `src/components/**`).
+
+When triggered, you MUST complete a playwriter UAT smoke BEFORE declaring PASS. Required steps:
+
+1. **Visit** the affected route (both locales if locale-sensitive — e.g. `/de/...` and `/en/...`).
+2. **Trigger** the affected interaction: click, type, upload, or scroll — whichever the finding describes.
+3. **Assert** the affected DOM element renders with the expected behaviour (text visible, button enabled, error absent, layout correct).
+4. **Capture** a screenshot to `.planning/audits/_screenshots/<finding-id>-<YYYY-MM-DD>/` — at minimum one "after" screenshot; add "before" if you can reproduce the regression.
+5. **Append a row** to `.planning/audits/UAT-LOG.md`:
+
+   | Date | Finding | Scope | Runner | Verdict | Evidence |
+   |------|---------|-------|--------|---------|----------|
+   | YYYY-MM-DD | `<finding-id>` | `<route + interaction>` | `tester` | PASS / FAIL | `.planning/audits/_screenshots/<finding-id>-<date>/` |
+
+6. **Add `## Playwriter UAT` block** to the finding's status file (format in §Step 5 below).
+
+**Allowed runners:** `tester` | `audit-team-uat-sweep` | `session-implementer`.
+**Forbidden runner:** `manual-<user>` — the user steers scope and approves push; they do NOT run UAT or maintain UAT-LOG. The harness automates UAT execution.
+
+**Falsifier:** PASS without a `## Playwriter UAT` block on a render-layer finding ⇒ the render-layer hypothesis was not actually verified. Do not declare PASS on a render-layer finding without completing this mandate.
+
 # Working Method
 
 ## Step 0 — Receive input
@@ -115,6 +138,21 @@ Match: yes | no
 ### Notes for next reviewer
 <one paragraph if anything subtle to know>
 ```
+
+**For render-layer findings only — add this block after `## Tester verdict`:**
+
+```markdown
+## Playwriter UAT
+
+**Date:** YYYY-MM-DD
+**Runner:** tester | audit-team-uat-sweep | session-implementer
+**Scope:** <route visited + interaction triggered + DOM element asserted>
+**Verdict:** PASS | FAIL | N/A (not render-layer)
+**Evidence:** <path to screenshot(s) in `.planning/audits/_screenshots/<finding-id>-<date>/`>
+```
+
+Allowed runner values: `tester` | `audit-team-uat-sweep` | `session-implementer`.
+`manual-<user>` is NOT a valid runner — use one of the above only.
 
 If FAIL: include a `### Failure delta` section with exact bytes-of-difference from expected. The implementer reads this and reruns.
 

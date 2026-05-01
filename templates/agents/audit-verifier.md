@@ -73,6 +73,35 @@ Every report's Self-Check has a Confidence: high/medium/low statement. Spot-chec
 - "Confidence: high" with major gaps in citations → dishonest
 - "Confidence: low" with no remediation plan → unfinished
 
+### Q6 — Designer-protocol enforcement (when a designer agent is in the run)
+
+If the project has a `designer`-style agent (e.g. `zenith-designer`, `ui-designer`) and it ran in the audit, the verifier enforces these content checks (the deterministic verifier already checks heading presence; Q6 covers the *content* of those headings):
+
+1. **Competitive-analyst citation present.** Grep the report for `competitive-analyst/` (or the project's parity-source agent) — must cite at least one report by filename + section anchor. If absent → FAIL ("designer skipped competitive grounding pre-read").
+2. **Dark/Light token map populated.** The report has the `## Dark / Light mode token map` heading; check the table beneath has ≥6 token rows AND every row lists both light + dark tokens (no `—` placeholders, no "TBD"). Empty table or token columns blank → FAIL.
+3. **Zero silent drops.** For every line in the `## What I deliberately did NOT include` section, regex must match either `→ FR-(DESIGN|REG|WORKFLOW|AI|QA|COMP|SEC)-\d{4}` OR `→ rejected:` followed by a non-empty reason. Any line matching neither = silent drop = FAIL.
+4. **Discovered-gaps table consistency.** For every FR-ID listed in the `## Discovered gaps` table:
+   - The corresponding file `.planning/audits/_feature-requests/FR-<DOMAIN>-<NNNN>.md` MUST exist. Missing file → FAIL.
+   - The FR file's `origin_report:` frontmatter field MUST cite this designer report (or a peer report consumed by this run). Mismatched origin → WARN.
+   - The FR file must have all required frontmatter fields (id, title, filed_by, filed_on, origin_report, origin_trigger, module, surface, severity, type, cost, status, related_findings, related_competitor). Any FAIL on the deterministic FR-inbox check counts as FAIL here.
+5. **PM-readable Reason field.** Sample 3 random FRs filed in this run. For each, read `## Reason`. If you find specialist jargon without a 3-word gloss on first use, or no plain-language consequence statement, that's a WARN.
+6. **`redesign-module:` scope only — Module contract before per-route specs.** If the scope starts with `redesign-module:`, the `## Module contract` heading must appear *before* the first `## Section-by-section spec` heading in the report (line-number check). Inverted order = WARN ("designer wrote per-route specs first then back-filled the contract — opposite of the protocol").
+
+Count violations: ≥1 FAIL anywhere in Q6 = FAIL on the run; ≥2 WARN = FAIL; 1 WARN = WARN.
+
+## Step 2.5 — HSI attribution discipline
+
+When the deterministic verifier emits FAILs, your verdict narrative will often discuss **why** those FAILs occurred. The `.planning/audits/SYSTEM-CHANGELOG.md` is an append-only experiment ledger; an HSI's `Status:` field (PROPOSED → APPLIED-PENDING-VERIFICATION → VERIFIED / REGRESSED) is load-bearing. **If your narrative attributes a FAIL signal to an applied HSI as a "regression," that is a falsifiable claim — get it wrong and you corrupt the iteration log.**
+
+**Before any sentence in your Step 4 report names an HSI-NNN as a regression, run this 4-step gate:**
+
+1. **Grep `SYSTEM-CHANGELOG.md` for every HSI mentioned in the run's FAIL stream.** For each, read the `Status:` field — PROPOSED, APPLIED-PENDING-VERIFICATION, VERIFIED, REGRESSED, DEFERRED, or REVERTED.
+2. **Enumerate any PROPOSED HSI whose surface area overlaps with the failing mechanism.** Two HSIs share surface area when (a) they touch the same spec / script / dictionary / agent file, OR (b) they target the same root cause from different angles.
+3. **If a plausible PROPOSED HSI exists, the verdict MUST be `BLOCKED-ON-PROPOSED-HSI: HSI-NNN`** — not "REGRESSED" against any applied HSI. The narrative must name the proposed HSI and explain why the failing mechanism is a different root cause from the applied HSI.
+4. **`REGRESSED` against an applied HSI is only valid when** (a) the FAIL signal targets the **exact mechanism** the applied HSI specced (e.g. a runtime error in the spec'd function, a missing key in the spec'd dictionary, a missing branch in the spec'd matcher), AND (b) no overlapping PROPOSED HSI exists.
+
+The "honest regressions" virtue of the harness collapses the moment one false-regression entry lands. Apply the gate every time.
+
 ## Step 3 — Combined verdict
 
 | Deterministic | + Qualitative | = Final |

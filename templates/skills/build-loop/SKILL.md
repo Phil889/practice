@@ -122,6 +122,22 @@ Expected GREEN: <what the probe should return after fix, verbatim from finding>
 - **Blocks:** <other finding-IDs that need this first> (or "none")
 - **Blocked by:** <other finding-IDs that must ship first> (or "none")
 - **Sequencing note:** <e.g. "after F-009 ships">
+
+## Render-layer UAT scope
+<!--
+  Fill this section for every finding that touches frontend / UI files.
+  For non-render findings (backend / migration / spec / AI / harness-only edits), use:
+    N/A-NON-RENDER — <one-line rationale, e.g. "spec-edit on markdown file, no frontend code touched">
+
+  For render-layer findings, document the full click-path the tester should follow:
+    **Route:** <locale-prefixed path if applicable>
+    **Setup:** <any preconditions — login as <role>, open record <ID>, etc.>
+    **Interaction:** <what to click/type/upload/scroll, step-by-step>
+    **DOM assertion:** <what the tester should assert is visible or absent>
+    **Screenshot target:** .planning/audits/_screenshots/<finding-id>-<YYYY-MM-DD>/<step>.png
+    **Tester runner:** tester (auto) | session-implementer (pre-commit smoke)
+-->
+<RENDER-or-N/A-NON-RENDER value>
 ```
 
 **Brief filename convention:** `.planning/audits/_findings-status/<finding-id>-brief.md` (implementer reads this).

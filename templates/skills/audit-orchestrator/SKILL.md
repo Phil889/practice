@@ -41,6 +41,8 @@ The user invokes you via `/audit-orchestrator <scope: ...>` or `Skill({skill: "a
 - `scope: quarterly-review` — full foundation audit + cross-cutting strategic refresh
 - `scope: feature-design:<name>` — design-leading specialist drives, others advise
 - `scope: module-deep-dive:<module>` — Tier-2 audit for a single module (all relevant specialists scoped to one module, synthesised into a module strategy)
+- `scope: redesign:<route>` — designer-led single-route redesign with mandatory competitive grounding
+- `scope: redesign-module:<module>` — designer-led full-module redesign producing a shared Module contract + per-route specs + cross-route consistency check
 - `scope: production-readiness-gate` — ship-or-no-ship sweep: full foundation + qa-engineer, hard-gated by audit-verifier PASS
 - `scope: ship-findings:<source-report>` — **build playbook.** Hand off to the `build-loop` skill to ship the Top-N findings from a synthesis or specialist report.
 - `scope: audit-and-ship:<module>` — **combined.** Run `module-deep-dive:<module>` → audit-verifier → build-loop with the synthesis Top-N → release-readiness.
@@ -113,6 +115,14 @@ Write a single integrated report. Do not just concatenate specialist outputs —
 - Which design recommendations are blocked by QA findings? (= sequencing constraints)
 
 **Every top-N action MUST cite ≥2 specialists** (R3 + Q3). If you can only cite one specialist for an action, drop it from top-N — it's not strategic, it's tactical.
+
+**Surface Feature Requests filed during this run.** After all specialists return, glob `.planning/audits/_feature-requests/FR-*-*.md` for files whose `filed_on:` frontmatter matches today's date. The synthesis TL;DR MUST include a one-line block:
+
+```
+**Feature Requests filed this run:** N — FR-<DOMAIN>-NNNN (Pn, <one-line title>), …
+```
+
+Without this, gaps the harness discovered die in prose and the user never sees the backlog signal. If N=0 explicitly state `**Feature Requests filed this run:** 0 (no out-of-scope gaps surfaced)`.
 
 The synthesis itself MUST end with a Self-Check section (R4) — same template the specialists use, applied to the orchestrator's own synthesis. Verifier checks for it.
 
@@ -289,7 +299,50 @@ Before Phase 1 dispatch, evaluate each specialist's **expected marginal value** 
 **Phase 2:** sequential — consumes Phase-1.
 **Phase 3:** module strategy synthesis.
 
+**Default = FULL specialist roster** (subject to the relevance heuristic above). Narrowing requires the user explicitly passing `--narrow=<comma-list>` in the scope args. **Do not propose "hybrid 2-specialist" or "lighter" variants in your initial recommendation** — that pattern produces repeated mid-session scope-widening (the user has to ask "did we run all specialists?" "did we audit the pipeline?"). Default-full closes the gap.
+
 **Then auto-dispatch audit-verifier (Step 6).**
+
+## `scope: redesign:<route>` — designer-led single-route redesign
+
+Use when a single page in an existing module needs to be re-designed for density + AI-first surfacing without touching its module siblings. The designer agent requires competitor grounding before designing — the orchestrator enforces sequencing.
+
+**Phase 1 (parallel — competitive grounding):**
+
+- `competitive-analyst` `scope: feature:<module-of-route>` — produces parity matrix the designer must cite by filename. **Skip only if** a competitive-analyst report `<date>-*-<module>.md` already exists with date <30 days old; in that case log the existing report's filename in the PLAN and proceed directly to Phase 2.
+
+**Phase 2 (sequential — consumes Phase-1):**
+
+- designer `scope: redesign:<route>` — must cite Phase-1 competitive report by filename + section anchor. Output includes `## Competitor parity`, `## Dark / Light mode token map`, `## Discovered gaps` (every gap filed as `FR-DESIGN-NNNN.md`).
+
+**Phase 3 — verifier:** auto-dispatch audit-verifier with Q6 designer-protocol checks active.
+
+**Phase 4 — synthesis surfaces FRs.** The orchestrator's TL;DR MUST include a one-line FR summary so the user sees the backlog signal without opening individual FR files.
+
+## `scope: redesign-module:<module>` — designer-led module-wide redesign
+
+Use when an entire module needs a coordinated redesign — list page + detail page + create flows all moving to the new design system together. Half-redesigned modules ship worse UX than untouched ones; this scope is the antidote.
+
+**Phase 1 (parallel — competitive + workflow grounding):**
+
+- `competitive-analyst` `scope: feature:<module>` — parity matrix the designer must cite. Skip-rule same as `redesign:`.
+- `workflow-architect` `scope: module:<module>↔<neighbours>` — confirms which routes in this module exist + which cross-module bridges they participate in (designer needs this for the Module surface map).
+
+**Phase 2 (sequential — consumes Phase-1):**
+
+- designer `scope: redesign-module:<module>` — produces:
+  - `## Module surface map` (every route in module with role + primary job + current state)
+  - `## Module contract` (shared nav / header / KPI grammar / drawer-vs-page / dark-light tokens — written *before* per-route specs)
+  - `## Section-by-section spec` per route, each referencing the Module contract
+  - `## Cross-route consistency check` (final table verifying all routes use the contract)
+  - `## Competitor parity` + `## Dark / Light mode token map` + `## Discovered gaps`
+  - Build estimate split into Phase 0 (shared primitives) → Phase 1..N (per-route).
+
+**Phase 3 — verifier:** auto-dispatch audit-verifier. Q6 includes the redesign-module-only check (Module contract written before per-route specs — line-number ordering).
+
+**Phase 4 — synthesis surfaces FRs and the Cross-route consistency table.** The orchestrator's synthesis must reproduce the consistency table verbatim and call out any inconsistencies in the TL;DR.
+
+**Why this scope exists:** `redesign:` (single-route) on a multi-route module produces the "half-skinned module" failure mode — list page modern, detail page legacy. Without this scope, designers can't be told "redesign Module X" in one call; they'd get a single page back.
 
 ## `scope: ship-findings:<source-report>` — **build playbook**
 

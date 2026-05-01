@@ -142,6 +142,52 @@ Re-dispatches are capped at 2 retries per specialist per audit run. After 2, esc
 
 ---
 
+## Commit-msg-convention (canonical field reference)
+
+Every commit produced by the implementer uses these structured fields. `git log --grep "audit:"` lists every audit-driven ship; `git log --grep "<finding-id>"` shows a finding's history.
+
+**Required fields** (in order):
+
+```
+<type>(<scope>): <one-line summary ≤70 chars> [<finding-id>]
+
+audit: <audit-slug>
+roadmap: <phase-id>
+finding: <finding-id> (<P0|P1|P2>) — <specialist>
+report: <repo-relative path>
+driver: <comma-separated specialists>
+b-pattern: <pattern-id | n/a>
+playwriter-uat: <PASS | FAIL | SKIPPED-BY-DESIGN | N/A-NON-RENDER>
+
+verifiable-outcome-pre:
+  query: <SQL or curl probe>
+  result: <captured output, ≤3 lines>
+  state: RED
+
+verifiable-outcome-post:
+  query: <same SQL or probe>
+  result: <captured output, ≤3 lines>
+  state: GREEN
+
+regression-check: <patterns spot-checked clean>
+
+Co-Authored-By: <as configured>
+```
+
+### `playwriter-uat:` field specification
+
+**Allowed values:** `PASS | FAIL | SKIPPED-BY-DESIGN | N/A-NON-RENDER` — exact strings, no other values accepted.
+
+**Mapping rule:**
+- Any commit whose staged files include paths under your project's UI source root (e.g. `frontend/app/**`, `frontend/components/**`, `src/components/**`) MUST set a non-`N/A-NON-RENDER` value (`PASS`, `FAIL`, or `SKIPPED-BY-DESIGN`).
+- Backend, migration, AI-agent, spec, and docs commits set `N/A-NON-RENDER`.
+
+**Field source:** implementer copies from the tester's status-file `## Playwriter UAT` block. Do not self-assess — wait for tester verdict on render-layer findings.
+
+**Verifier hook:** add a `RULE-UAT-1` rule in `verify_audit.py` that flags render-layer commits with absent or `N/A-NON-RENDER` field. WARN initially; promote to FAIL once the project is past first-pass adoption.
+
+---
+
 ## Maintenance
 
 This file is owned by `audit-orchestrator` and `/init`. When new specialists are added:
