@@ -6,6 +6,72 @@ Format: [version] — date · one-line summary, followed by What's new / Affecte
 
 ---
 
+## [0.15.0] — 2026-05-01 · Hygiene fully cross-reference-anchored + FR inbox lifecycle
+
+The hygiene policy was a hybrid in v0.14.x — it had the cross-reference *concept* in one section but its retention tables still used time-based triggers (14-day session windows, 30-day finding archive, 90-day report archive). That inconsistency meant projects either followed the time triggers (and kept irrelevant entries while archiving still-cited ones) or followed the concept (and ignored half the table). v0.15.0 makes the entire policy cross-reference-anchored — *"is something active still pointing to it?"* is the only question that matters, regardless of age.
+
+Plus the **`_feature-requests/` lifecycle** that the live harness has been running for weeks: filed → triaged → scheduled → shipped (or rejected). Auto-flagging at 90 days unreviewed, auto-rejection at 180 days, archive on cross-reference disappearance.
+
+### What's new
+
+**Hygiene retention tables fully cross-reference-anchored.**
+- `SYSTEM-CHANGELOG.md` — APPLIED-VERIFIED stays "while referenced by any open finding, active ROADMAP phase, or pending FR"; archive when no active cross-reference AND ≥3 supervisor passes (was: 14-day timer + 3 passes).
+- `SESSION-LOG.md` — entries stay "cited by active work"; archive when "all findings/HSIs archived AND entry's own tasks complete" (was: last-14-days-or-50-entries window).
+- `_findings-status/` — PASS findings stay "while referenced by active HSI, open ROADMAP phase, or pending FR"; archive when "not referenced AND 30 days post-PASS" (was: flat 30-day timer).
+- Specialist reports — stay "while referenced by active finding, active HSI, or open ROADMAP phase" (was: ≤90-day window).
+
+**`_feature-requests/` retention lifecycle (NEW section).**
+Six states with explicit archive triggers:
+
+| FR status | Stays active | Archive trigger |
+|---|---|---|
+| `open` (filed, not yet triaged) | 90 days | unreviewed >90d → flagged in next snapshot (NOT archived) |
+| `open` (>180d unreviewed) | until triaged | auto-rejected with reason `stale-unreviewed`, archived 30d later |
+| `triaged` | while referenced by active ROADMAP phase or pending HSI | no active cross-reference |
+| `scheduled` | until shipped or rejected | status change |
+| `shipped` (linked to commit + finding-ID) | while referenced by active finding/HSI | no active cross-reference AND 30d post-ship |
+| `rejected` (with reason) | 90 days | no active cross-reference AND 90d post-rejection |
+
+Plus auto-actions: surface FR counts in every snapshot, auto-flag stale opens, auto-reject 180d unreviewed, validate frontmatter every hygiene run, regenerate `_feature-requests/INDEX.md` automatically.
+
+**Token-budget table gains `_feature-requests/` row.**
+Soft cap 30 FRs / hard cap 60 FRs (open + triaged + scheduled). Same protective-mode behaviour as other categories.
+
+**"Key principle: archive by relevance, not by age" section.**
+Closing principle for the policy: *"The question is never 'how old is it?' — it's always 'is something active still pointing to it?'"* A 30-day-old entry cited by an open ROADMAP phase stays active. A 2-day-old entry with all citations resolved gets archived immediately.
+
+**Hygiene-run protocol updates.**
+- Step 5 now regenerates `_feature-requests/INDEX.md`
+- Step 7 hygiene-log entry adds `Auto-rejected: <N> stale-unreviewed FRs` line
+- Step 8 commit message format extended to include FR archive count
+- Pre-state / Post-state lines now include FR open count
+
+**"What hygiene does NOT do" gains two rules:**
+- Never archives a report that is cited by active work (cross-reference check is mandatory)
+- Cross-reference check is the safety net before any archive move
+
+### Why the previous policy was broken
+
+The hybrid was the worst of both worlds. Projects that followed the time triggers archived a session entry on day 15 even though an open finding still cited it — supervisor lost continuity on the next snapshot. Projects that followed the cross-reference concept ignored the time triggers and kept everything forever — the active set bloated past hard cap. v0.15.0 deletes the time triggers from the retention tables (they only show up as *post-resolution* delays like "30 days post-PASS") and makes the cross-reference check the load-bearing rule.
+
+The first time a project switches from v0.14.x to v0.15.0, expect a **50–70% reduction in active SESSION-LOG size** when hygiene runs — not because anything is lost (git history has everything), but because most "recent" entries had already been resolved and were just sitting in the active view.
+
+### Affected templates
+
+- `templates/planning/HYGIENE-POLICY.md` — full rewrite of retention tables to cross-reference-anchored model + new `_feature-requests/` section + token-budget row + hygiene-run protocol updates + "Key principle: archive by relevance, not by age" closing
+- `package.json` — version 0.15.0
+
+### Migration notes (existing v0.14.x installations)
+
+1. **Re-run `/init` is NOT required.**
+2. **Replace your `.planning/audits/HYGIENE-POLICY.md` (or wherever you put it) with the v0.15.0 template.** The retention tables are not back-compatible — time-based and cross-reference-based hygiene archive different sets of artefacts.
+3. **First hygiene run after upgrade will produce a larger-than-usual archive batch** as the cross-reference check sweeps entries that the time-trigger had kept in active view. This is expected and a one-time correction; subsequent runs return to normal cadence.
+4. **If you already have an `_feature-requests/` inbox**, the new lifecycle rules will start applying immediately on the next `/supervisor mode: hygiene` run — auto-rejection of 180d-unreviewed opens is automatic and reversible (the user can override on review).
+5. **If you don't have an FR inbox yet**, the `_feature-requests/` section is optional — projects without a designer-style agent that files FRs can ignore that table.
+6. **Update your supervisor SKILL's NEXT MOVE template** to surface FR counts (`<N> open / <N> triaged / <N> scheduled`) — the snapshot needs the visibility for users to keep the inbox flowing.
+
+---
+
 ## [0.14.0] — 2026-05-01 · MANDATORY-AUTO handover + "new session" vocabulary
 
 The handover protocol is now non-negotiable. Previously the supervisor would sometimes recommend "consider stopping here" then ask "want me to write a handover?" — that question was the bug. Users delegated session-boundary autonomy to the harness; asking permission every time wastes the round-trip. v0.14.0 makes handover writing **automatic** when any new-session trigger fires, and clarifies the vocabulary so users understand what the supervisor means.

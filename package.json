@@ -1,6 +1,6 @@
 {
   "name": "practice-harness",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Audit-grade AI specialist harness for Claude Code. Ships verified work via supervisor → orchestrators → leaf agents.",
   "license": "MIT",
   "homepage": "https://github.com/Phil889/practice",
